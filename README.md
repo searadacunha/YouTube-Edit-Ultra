@@ -33,7 +33,7 @@ A local Python + FFmpeg workflow for assembling boxing, football and other sport
   <a href="https://www.youtube.com/watch?v=Yq7Yy8H5J-8">Ronaldo 2007/08 — Skills/Runs (Teo CRi)</a> · <a href="https://www.youtube.com/watch?v=j6FpcvSor8g">Ronaldo — Unstoppable / Sia</a>
 </p>
 
-Use those public YouTube videos as **visual and pacing references**. The images are linked YouTube thumbnails, not included source footage; **This project does not download or redistribute example videos by default.**
+Use those public YouTube videos as **visual and pacing references**. The linked thumbnails are visual references, not bundled footage. **This project does not download or redistribute example videos by default.**
 
 ## What is included
 
