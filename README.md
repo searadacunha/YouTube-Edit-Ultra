@@ -2,19 +2,25 @@
 
 # YouTube-Edit-Ultra
 
-### One prompt. Your athlete. Your music. Your duration. A complete sports montage.
+**Action-first sports edits. Music gives them rhythm, not the cut points.**
 
-**Sport first. Music second. Never cut the goal, knockout, combination or celebration just to hit a beat.**
+A local Python + FFmpeg workflow for assembling boxing, football and other sports highlights from footage and music you supply. It plans complete action windows, aligns key moments to music, and exports an MP4, thumbnail, storyboard and YouTube metadata.
 
-[Getting started](#quick-start) · [How it works](#sports-first-editing) · [YouTube publication](#youtube-publishing) · [FR](#démarrage-en-français)
+[![Quality checks](https://github.com/searadacunha/YouTube-Edit-Ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/searadacunha/YouTube-Edit-Ultra/actions/workflows/ci.yml)
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![MIT](https://img.shields.io/badge/license-MIT-blue)
+
+[Quick start](#quick-start) · [Action integrity](#sports-first-editing) · [YouTube publishing](#youtube-publishing) · [Français](#démarrage-en-français)
 
 </div>
 
 ---
 
-> **The pitch:** “Cristiano Ronaldo · 30 minutes · American hip-hop” → local source discovery → source analysis → action-safe timeline → music mixing → export `montage.mp4`, `thumbnail.jpg`, YouTube title/description/tags → **optional** YouTube publication.
+> **Input:** athlete / sport + desired duration + your footage and music library.
 >
-> After one-time setup and adding footage/music to your library, no timeline editing is required.
+> **Output:** `montage.mp4`, `thumbnail.jpg`, `storyboard.jpg`, an edit plan and publishing metadata.
+>
+> **Important limit:** automatic motion and scene detection proposes action *candidates*, not verified goals or knockouts. For reliable beginnings and endings, supply event annotations or external spotting predictions. Uploading to YouTube is always optional.
 
 ## Inspiration: the kind of edits this project targets
 
@@ -24,10 +30,10 @@
 </p>
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=Yq7Yy8H5J-8">Ronaldo 2007/08 — Skills/Runs (Teo CRi, 13M+ views)</a> · <a href="https://www.youtube.com/watch?v=j6FpcvSor8g">Ronaldo — Unstoppable / Sia (10M+ views reported)</a>
+  <a href="https://www.youtube.com/watch?v=Yq7Yy8H5J-8">Ronaldo 2007/08 — Skills/Runs (Teo CRi)</a> · <a href="https://www.youtube.com/watch?v=j6FpcvSor8g">Ronaldo — Unstoppable / Sia</a>
 </p>
 
-Use those public YouTube videos as **visual and pacing references**. The images are linked YouTube thumbnails, not included source footage; view counts reflect publicly reported figures and can change. **This project does not download or redistribute example videos by default.**
+Use those public YouTube videos as **visual and pacing references**. The images are linked YouTube thumbnails, not included source footage; **This project does not download or redistribute example videos by default.**
 
 ## What is included
 
@@ -55,10 +61,30 @@ Presets also exist for MMA, basketball and generic sports. Sports detection alon
 
 ## Quick start
 
-**macOS** (also works on Linux with FFmpeg):
+### macOS on Apple Silicon
+
+Run these commands in Terminal. **Clone the repository first**: there is no ZIP file to unzip unless you downloaded one yourself.
 
 ```bash
-brew install ffmpeg python@3.12 gh          # macOS; install your system equivalents on Linux
+brew install ffmpeg python@3.12
+git clone https://github.com/searadacunha/YouTube-Edit-Ultra.git
+cd YouTube-Edit-Ultra
+
+bash scripts/bootstrap_mac.sh
+source .venv/bin/activate
+ultra doctor
+```
+
+The bootstrap script uses Homebrew's `/opt/homebrew/bin/python3.12` and installs the editable package plus optional features. For Intel Macs or Linux, use the manual route below.
+
+### Linux / Intel macOS / manual setup
+
+Install Python **3.11+** and FFmpeg (including `ffprobe`) first, then:
+
+```bash
+git clone https://github.com/searadacunha/YouTube-Edit-Ultra.git
+cd YouTube-Edit-Ultra
+
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[all]'
@@ -66,23 +92,23 @@ ultra init
 ultra doctor
 ```
 
-On Mac, `./scripts/bootstrap_mac.sh` performs the installation automatically.
+If `ultra` is not found, ensure `source .venv/bin/activate` ran in your **current** terminal. The CLI is installed inside this environment, not globally.
 
-Place your video files under `library/videos/` (include the athlete's name in the file name, e.g. `Cristiano_Ronaldo_2008.mp4`) and music under a genre folder, such as `library/music/hip-hop/`.
+### Make a montage
 
-Then run:
+Put local source videos in `library/videos/` (include the athlete's name in the file name, e.g. `Cristiano_Ronaldo_2008.mp4`) and music in `library/music/hip-hop/` or another genre folder. Source footage and tracks must be provided by you or explicitly authorized.
 
 ```bash
 ultra create "Cristiano Ronaldo 30 minutes hip-hop"
 ```
 
-Output:
+The program writes a project directory such as:
 
 ```text
 output/cristiano-ronaldo-1800s/
 ├── montage.mp4
 ├── thumbnail.jpg
-├── storyboard.jpg               # source-frame contact sheet for QA
+├── storyboard.jpg
 ├── youtube_metadata.json
 ├── edit_plan.json
 ├── action_integrity_report.json
@@ -90,7 +116,7 @@ output/cristiano-ronaldo-1800s/
 └── render_report.json
 ```
 
-No posting happens unless you explicitly add `--publish` or run `ultra publish`.
+No upload happens unless you explicitly request `--publish` or run `ultra publish`. If the available footage is insufficient, the tool reports that rather than silently repeating actions.
 
 ### Concrete examples
 
@@ -248,7 +274,7 @@ pip install -e '.[dev]'
 pytest -q
 ```
 
-To publish this source repository to your GitHub account, run [`scripts/publish_github.sh`](scripts/publish_github.sh) after `gh auth login`; details in [`docs/GITHUB.md`](docs/GITHUB.md).
+Maintainer notes on repository publishing are available in [`docs/GITHUB.md`](docs/GITHUB.md); they are not needed to install or use the editor.
 
 See [`docs/WORKFLOW.md`](docs/WORKFLOW.md), [`docs/ACTION_POLICY.md`](docs/ACTION_POLICY.md), and the ready-to-use [Claude Code skill](.claude/skills/youtube-edit-ultra/SKILL.md).
 
