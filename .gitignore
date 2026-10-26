@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+.env.*
+.DS_Store
+*.log
+# Never commit raw videos/music, YouTube private tokens or customer assets.
+output/
+library/**
+!library/videos/
+!library/videos/.gitkeep
+!library/music/
+!library/music/.gitkeep
+!library/annotations/
+!library/annotations/.gitkeep
+*.youtube.json
+token.json
+client_secret.json
+credentials.json
+*.secret.json

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youtube-edit-ultra"
+version = "0.1.0"
+description = "Sport-first, action-preserving music highlight editor with optional YouTube publishing"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "YouTube-Edit-Ultra contributors"}]
+keywords = ["sport", "boxing", "football", "highlights", "beat-sync", "youtube", "editing"]
+dependencies = [
+  "numpy>=1.26,<3",
+  "librosa>=0.10.2,<1",
+  "opencv-python-headless>=4.9,<5",
+  "Pillow>=10,<13",
+  "PyYAML>=6,<7",
+]
+
+[project.optional-dependencies]
+download = ["yt-dlp[default]>=2025.1.0"]
+scenes = ["scenedetect>=0.7,<1"]
+youtube = ["google-api-python-client>=2,<3", "google-auth-oauthlib>=1,<2", "google-auth-httplib2>=0.2,<1"]
+all = ["yt-dlp[default]>=2025.1.0", "scenedetect>=0.7,<1", "google-api-python-client>=2,<3", "google-auth-oauthlib>=1,<2", "google-auth-httplib2>=0.2,<1"]
+dev = ["pytest>=8,<10", "ruff>=0.8"]
+
+[project.scripts]
+ultra = "youtube_edit_ultra.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100

@@ -1,0 +1,6 @@
+{
+  "events": [
+    {"start": 115.0, "peak": 122.6, "end": 136.0, "label": "dribble_shot_goal_celebration"},
+    {"start": 228.5, "peak": 234.2, "end": 245.2, "label": "run_cross"}
+  ]
+}
