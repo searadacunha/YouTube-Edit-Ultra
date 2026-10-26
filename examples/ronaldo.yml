@@ -1,0 +1,13 @@
+# Example for a fully annotated event-safe Ronaldo montage.
+# Replace these placeholders with your actual local media files.
+athlete: Cristiano Ronaldo
+sport: football
+style: hip-hop
+duration: 30m
+title: CRISTIANO RONALDO | ULTIMATE SKILLS & GOALS MIX
+sources:
+  - path: ../library/videos/Cristiano_Ronaldo_2008.mp4
+    annotations: ../library/annotations/Cristiano_Ronaldo_2008.json
+music:
+  - ../library/music/hip-hop/track-01.mp3
+  - ../library/music/hip-hop/track-02.mp3
