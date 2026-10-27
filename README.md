@@ -16,7 +16,7 @@ A local Python + FFmpeg editor for boxing, football and other sports. Supply foo
 
 ## Video spotlight
 
-Football, boxing and big moments. Click a thumbnail to watch on YouTube.
+Skills, goals and music. Click a thumbnail to watch on YouTube.
 
 <table>
   <tr>
@@ -30,22 +30,22 @@ Football, boxing and big moments. Click a thumbnail to watch on YouTube.
       <br><sub><a href="https://www.youtube.com/@kiano7hd">KIANO7HD</a></sub>
     </td>
     <td align="center" valign="top" width="33%">
-      <a href="https://www.youtube.com/watch?v=jfpUia2gJjg">
-        <img src="https://img.youtube.com/vi/jfpUia2gJjg/maxresdefault.jpg" width="400" alt="Mike Tyson versus Frank Bruno — full fight replay">
+      <a href="https://www.youtube.com/watch?v=KaJ7rc0uNTU">
+        <img src="https://img.youtube.com/vi/KaJ7rc0uNTU/maxresdefault.jpg" width="400" alt="Neymar Jr — Balada Boa, sublime skills mix">
       </a>
-      <br><strong>Mike Tyson vs Frank Bruno</strong>
-      <br><sub>Full fight replay · Boxing</sub>
-      <br><br><strong>5.3M+ views</strong>
-      <br><sub><a href="https://www.youtube.com/@TNTFightSports">TNT Fight Sports</a></sub>
+      <br><strong>Neymar Jr</strong>
+      <br><sub>Balada Boa · Skills mix</sub>
+      <br><br><strong>17.1M+ views</strong>
+      <br><sub><a href="https://www.youtube.com/@KHDfootball">KHDfootball</a></sub>
     </td>
     <td align="center" valign="top" width="33%">
-      <a href="https://www.youtube.com/watch?v=JrKv_LpRtK0">
-        <img src="https://img.youtube.com/vi/JrKv_LpRtK0/maxresdefault.jpg" width="400" alt="Naoya Inoue versus Stephen Fulton — fight highlights">
+      <a href="https://www.youtube.com/watch?v=QmpilIF6PG0">
+        <img src="https://img.youtube.com/vi/QmpilIF6PG0/maxresdefault.jpg" width="400" alt="Kylian Mbappé — Ramenez la coupe à la maison, skills and goals 2024">
       </a>
-      <br><strong>Naoya Inoue vs Stephen Fulton</strong>
-      <br><sub>Fight highlights · Boxing</sub>
-      <br><br><strong>3.2M+ views</strong>
-      <br><sub><a href="https://www.youtube.com/@toprank">Top Rank Boxing</a></sub>
+      <br><strong>Kylian Mbappé</strong>
+      <br><sub>Ramenez la coupe à la maison</sub>
+      <br><br><strong>19.5M+ views</strong>
+      <br><sub><a href="https://www.youtube.com/@resheditz">resheditz ツ</a></sub>
     </td>
   </tr>
 </table>
