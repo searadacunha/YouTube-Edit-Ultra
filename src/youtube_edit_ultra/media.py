@@ -88,24 +88,24 @@ def download_explicit(urls: list[str], folder: Path) -> list[Path]:
         raise UltraError("Installer l'option download : pip install '.[download]' ou brew install yt-dlp")
     folder.mkdir(parents=True, exist_ok=True)
     result: list[Path] = []
-    for idx, url in enumerate(urls):
+    for url in urls:
         parts = urlparse(url)
         if parts.scheme not in {"http", "https"} or not parts.hostname:
             raise UltraError(f"URL non HTTP(S) : {url!r}")
         if parts.username or parts.password:
             raise UltraError("URL avec identifiants refusée")
-        before = set(folder.iterdir())
-        pattern = str(folder / f"source-{idx:04d}-%(id)s.%(ext)s")
+        # Cache by URL, not its position in this run. Reordering URLs must
+        # never make an idempotent rerun import another source's old files.
+        prefix = "source-" + hashlib.sha256(url.encode()).hexdigest()[:20]
+        pattern = str(folder / f"{prefix}-%(id)s.%(ext)s")
         run(["yt-dlp", "--no-playlist", "--no-overwrites", "--restrict-filenames", "-f", "bv*+ba/b",
              "--merge-output-format", "mp4", "-o", pattern, "--", url])
-        new = [p for p in set(folder.iterdir()) - before if p.suffix.lower() in VIDEO_EXT]
-        if not new:
-            # Idempotent rerun.
-            new = list(folder.glob(f"source-{idx:04d}-*"))
+        new = sorted(p for p in folder.glob(f"{prefix}-*")
+                     if p.is_file() and p.suffix.lower() in VIDEO_EXT)
         if not new:
             raise UltraError(f"Aucune vidéo sauvegardée depuis: {url}")
-        result.extend(p for p in new if p.suffix.lower() in VIDEO_EXT)
-    return sorted(set(result))
+        result.extend(new)
+    return list(dict.fromkeys(result))
 
 
 def ffmpeg_encode_args(*, quality: int = 21) -> list[str]:
@@ -121,20 +121,18 @@ def download_audio_explicit(urls: list[str], folder: Path) -> list[Path]:
         raise UltraError("Installer le téléchargeur audio : pip install '.[download]'")
     folder.mkdir(parents=True, exist_ok=True)
     result = []
-    for idx, url in enumerate(urls):
+    for url in urls:
         parts = urlparse(url)
         if parts.scheme not in {"https", "http"} or not parts.hostname:
             raise UltraError(f"URL audio invalide : {url!r}")
         if parts.username or parts.password:
             raise UltraError("URL audio avec identifiants refusée")
-        before = set(folder.iterdir())
+        prefix = "music-" + hashlib.sha256(url.encode()).hexdigest()[:20]
         run(["yt-dlp", "--no-playlist", "--no-overwrites", "--restrict-filenames",
              "-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "0",
-             "-o", str(folder / f"music-{idx:04d}-%(id)s.%(ext)s"), "--", url])
-        new = [p for p in set(folder.iterdir()) - before if p.suffix.lower() in AUDIO_EXT]
-        if not new:
-            new = list(folder.glob(f"music-{idx:04d}-*.mp3"))
+             "-o", str(folder / f"{prefix}-%(id)s.%(ext)s"), "--", url])
+        new = sorted(p for p in folder.glob(f"{prefix}-*.mp3") if p.is_file())
         if not new:
             raise UltraError(f"Aucun fichier audio extrait depuis: {url}")
         result.extend(new)
-    return sorted(set(result))
+    return list(dict.fromkeys(result))

@@ -40,8 +40,8 @@ def create_thumbnail(edit: Edit, title: str, out: Path, *, width: int = 1280,
             break
     font = font or ImageFont.load_default()
     label = title.upper()[:90]
-    bound = draw.textbbox((0, 0), label, font=font, stroke_width=2)
-    x = max(20, (width - (bound[2] - bound[0])) // 2)
+    # Pillow's "mm" anchor expects the text centre, not its left edge.
+    x = width // 2
     y = int(height * .84)
     draw.text((x, y), label, font=font, fill=(245, 245, 245, 255),
               stroke_width=3, stroke_fill=(6, 8, 12, 230), anchor="mm")

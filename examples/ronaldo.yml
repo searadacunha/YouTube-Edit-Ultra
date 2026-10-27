@@ -4,6 +4,8 @@ athlete: Cristiano Ronaldo
 sport: football
 style: hip-hop
 duration: 30m
+library: ../library
+output_dir: ../output
 title: CRISTIANO RONALDO | ULTIMATE SKILLS & GOALS MIX
 sources:
   - path: ../library/videos/Cristiano_Ronaldo_2008.mp4

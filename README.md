@@ -2,89 +2,63 @@
 
 # YouTube-Edit-Ultra
 
-**Action-first sports edits. Music gives them rhythm, not the cut points.**
+**Sports highlights with complete action windows, music and source audio.**
 
-A local Python + FFmpeg workflow for assembling boxing, football and other sports highlights from footage and music you supply. It plans complete action windows, aligns key moments to music, and exports an MP4, thumbnail, storyboard and YouTube metadata.
+A local Python + FFmpeg editor for boxing, football and other sports. Supply footage and music, choose an athlete and duration, then generate an MP4, a source-derived thumbnail and an inspectable edit plan.
 
 [![Quality checks](https://github.com/searadacunha/YouTube-Edit-Ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/searadacunha/YouTube-Edit-Ultra/actions/workflows/ci.yml)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![MIT](https://img.shields.io/badge/license-MIT-blue)
+[![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Quick start](#quick-start) · [Action integrity](#sports-first-editing) · [YouTube publishing](#youtube-publishing) · [Français](#démarrage-en-français)
+[Quick start](#quick-start) · [Commands](#commands) · [Action annotations](#action-annotations) · [Publishing](#optional-youtube-publishing) · [Français](#démarrage-en-français)
 
 </div>
 
----
-
-> **Input:** athlete / sport + desired duration + your footage and music library.
+> **Local export is the default.** Uploading requires an explicit command.
 >
-> **Output:** `montage.mp4`, `thumbnail.jpg`, `storyboard.jpg`, an edit plan and publishing metadata.
->
-> **Important limit:** automatic motion and scene detection proposes action *candidates*, not verified goals or knockouts. For reliable beginnings and endings, supply event annotations or external spotting predictions. Uploading to YouTube is always optional.
+> **Action detection is heuristic.** Motion peaks can suggest highlights; they cannot verify a goal, a knockout or an athlete's identity. Use annotations for precise action boundaries.
 
-## Inspiration: the kind of edits this project targets
+## What it does
 
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=Yq7Yy8H5J-8"><img src="https://img.youtube.com/vi/Yq7Yy8H5J-8/hqdefault.jpg" width="46%" alt="Cristiano Ronaldo 2007–08 dribbling, skills and runs — YouTube video" /></a>
-  <a href="https://www.youtube.com/watch?v=j6FpcvSor8g"><img src="https://img.youtube.com/vi/j6FpcvSor8g/hqdefault.jpg" width="46%" alt="Cristiano Ronaldo Unstoppable — skills and goals music video" /></a>
-</p>
+| Input | Processing | Output |
+|---|---|---|
+| Local footage, or explicit authorized URLs | Motion candidates or imported action annotations | H.264 MP4 at original 1× speed |
+| Local tracks, ordered playlist or explicit audio URLs | Crossfades, transient detection and impact alignment | Music mixed with original stadium/ring audio |
+| Athlete, sport and target duration | Whole-window selection with source interval reuse disabled by default | Edit plan, source report and integrity report |
+| Optional local Ollama model | Ranks candidate clips from sampled frames | Recorded model responses |
 
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=Yq7Yy8H5J-8">Ronaldo 2007/08 — Skills/Runs (Teo CRi)</a> · <a href="https://www.youtube.com/watch?v=j6FpcvSor8g">Ronaldo — Unstoppable / Sia</a>
-</p>
-
-Use those public YouTube videos as **visual and pacing references**. The linked thumbnails are visual references, not bundled footage. **This project does not download or redistribute example videos by default.**
-
-## What is included
-
-| Stage | Feature |
-|---|---|
-| Input | One natural-language prompt, local footage/music library or explicit source URLs |
-| Acquisition | Optional `yt-dlp` for **specific, rights-cleared video and music URLs**; no browser tokens/cookie extraction |
-| Sport recognition | Scene/motion analysis; optional PySceneDetect; sport-specific lead-in/follow-through; optional local Qwen3-VL scoring; SoccerNet-style predictions or precise action annotations |
-| Music | Fast FFmpeg/NumPy transient map by default, optional `librosa` beat tracking, soundtrack playlist and crossfades |
-| Editing | **Atomic action protection**: an event is never shortened to match the soundtrack, including buildup and aftermath |
-| Sound | Music plus preserved stadium/crowd/ring audio, lower in the mix |
-| Video | Natural colors, original 1× speed, original athlete, H.264 16:9 / configurable output |
-| Publish | Local MP4, thumbnail and metadata **by default**. OAuth resumable YouTube upload only when requested |
-| Reports | `edit_plan.json`, `action_integrity_report.json`, `source_report.json`, `render_report.json` |
-| Costs | Runs locally; optional Ollama model is local; no paid editing API is mandatory |
-| Safety | No song-content fingerprint evasion, no Content ID bypass, no implicit public uploads |
-
-### Sports supported
-
-**Football:** buildup → dribble → shot/pass → goal/save → celebration. The planner prefers complete sequences to aggressive cuts. It can import action-spotting events exported in SoccerNet-style JSON for goal, shot, foul, etc.
-
-**Boxing:** entry → jab/cross/combination → knockdown/defense → referee reaction. Nearby action windows are joined rather than cut mid-exchange.
-
-Presets also exist for MMA, basketball and generic sports. Sports detection alone is **not** equivalent to knowing the athlete's identity or guaranteeing every action is complete; see the accuracy note below.
+Football, boxing, MMA, basketball and generic presets provide different amounts of context around detected motion. The planner preserves each **selected window**; annotation quality determines whether that window contains the complete real-world action.
 
 ## Quick start
 
-### macOS on Apple Silicon
+### macOS: Apple Silicon or Intel
 
-Run these commands in Terminal. **Clone the repository first**: there is no ZIP file to unzip unless you downloaded one yourself.
+Install [Homebrew](https://brew.sh/) if needed, then run:
 
 ```bash
 brew install ffmpeg python@3.12
 git clone https://github.com/searadacunha/YouTube-Edit-Ultra.git
 cd YouTube-Edit-Ultra
-
 bash scripts/bootstrap_mac.sh
 source .venv/bin/activate
 ultra doctor
 ```
 
-The bootstrap script uses Homebrew's `/opt/homebrew/bin/python3.12` and installs the editable package plus optional features. For Intel Macs or Linux, use the manual route below.
+The bootstrap detects Python 3.11+ on your `PATH` or at standard Homebrew locations. To choose an interpreter explicitly:
 
-### Linux / Intel macOS / manual setup
+```bash
+ULTRA_PYTHON=/path/to/python3.12 bash scripts/bootstrap_mac.sh
+```
 
-Install Python **3.11+** and FFmpeg (including `ffprobe`) first, then:
+Clone the repository before running its scripts. No downloaded ZIP or global `ultra` installation is assumed. Activate `.venv` again in each new terminal.
+
+### Linux or manual installation
+
+Install Python 3.11+, `ffmpeg` and `ffprobe`, then:
 
 ```bash
 git clone https://github.com/searadacunha/YouTube-Edit-Ultra.git
 cd YouTube-Edit-Ultra
-
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[all]'
@@ -92,190 +66,138 @@ ultra init
 ultra doctor
 ```
 
-If `ultra` is not found, ensure `source .venv/bin/activate` ran in your **current** terminal. The CLI is installed inside this environment, not globally.
+For local editing without downloads, scene detection or uploads, install with `python -m pip install -e .` instead. Extras are `download`, `scenes` and `youtube`; `all` includes all three.
 
-### Make a montage
+### Create your first edit
 
-Put local source videos in `library/videos/` (include the athlete's name in the file name, e.g. `Cristiano_Ronaldo_2008.mp4`) and music in `library/music/hip-hop/` or another genre folder. Source footage and tracks must be provided by you or explicitly authorized.
-
-```bash
-ultra create "Cristiano Ronaldo 30 minutes hip-hop"
-```
-
-The program writes a project directory such as:
-
-```text
-output/cristiano-ronaldo-1800s/
-├── montage.mp4
-├── thumbnail.jpg
-├── storyboard.jpg
-├── youtube_metadata.json
-├── edit_plan.json
-├── action_integrity_report.json
-├── source_report.json
-└── render_report.json
-```
-
-No upload happens unless you explicitly request `--publish` or run `ultra publish`. If the available footage is insufficient, the tool reports that rather than silently repeating actions.
-
-### Concrete examples
+Add athlete-named footage to `library/videos/`, for example `Cristiano_Ronaldo_2008.mp4`. Add music to `library/music/hip-hop/`, `reggaeton/` or `funk-brasileiro/`.
 
 ```bash
-# 30-minute Ronaldo music mix (music & footage already in local library)
-ultra create "Cristiano Ronaldo 30 min hip-hop" --semantic-model qwen3-vl:2b
-
-# Mike Tyson — boxing combinations with conservative long actions
-ultra create "Mike Tyson 20 minutes rap US" --sport boxing
-
-# Quaresma x Brazilian funk — export locally, with NO mid-goal cuts
-ultra create "Ricardo Quaresma 30 minutes funk do brasil" --sport football
-
-# Inoue x J-pop (individual music files explicitly selected)
-ultra create "Naoya Inoue 30 minutes j-pop" --music "library/music/j-pop/song1.mp3" \
-  --music "library/music/j-pop/song2.mp3" --repeat-music
-
-# Optional publication (authorizes YouTube OAuth; see instructions below)
-ultra create "Marcos Maidana 30min reggaeton" --publish private
-
-# Plan only: show chosen actions and verify cuts WITHOUT rendering MP4
+# Inspect the action selection and reports before rendering.
 ultra create "Cristiano Ronaldo 30 min hip-hop" --dry-run
+
+# Render with the same inputs.
+ultra create "Cristiano Ronaldo 30 min hip-hop"
 ```
 
-`--repeat-music` is explicit because duplicating songs should never happen silently. Repeating video actions is disabled unless `--allow-repeat` is requested; by default, footage that is too short yields a clear error.
+The 30-minute example requires enough source actions and music. Choose a shorter duration for a small library. The tool reports insufficient material instead of silently repeating video or music.
 
-## Sports-first editing
+Outputs are written under `output/cristiano-ronaldo-1800s/`:
 
-```text
-              ATHLETE / SPORT / MUSIC / DURATION
-                              |
-                  LIBRARY + EXPLICIT SOURCES
-                              |
-             FFmpeg / optional yt-dlp ingest
-                              |
-                   Sports footage analysis
-          ┌───────────────────┼────────────────────┐
-    low-res motion      scene detection      athlete-specific
-    + cut candidate     (PySceneDetect)      action timestamps
-                                              (SoccerNet/JSON)
-          └───────────────────┼────────────────────┘
-                              |
-             OPTIONAL Ollama Qwen3-VL tagging
-                              |
-      ATOMIC EVENT WINDOWS (buildup/impact/resolution)
-                              |
-             Music beats, segments, crossfades
-                              |
-                ACTION-FIRST EDIT PLANNER
-       score alignment; NEVER split an event window
-                              |
-       FFmpeg renders exact event windows at 1× speed
-                              |
-       Mix natural ambience + music; thumbnail; metadata
-                              |
-                     LOCAL MP4 (default)
-                              |
-                YouTube OAuth (optional only)
+| File | Purpose |
+|---|---|
+| `montage.mp4` | Final video with mixed audio |
+| `thumbnail.jpg` | Actual source frame with a title |
+| `storyboard.jpg` | Contact sheet for visual review |
+| `edit_plan.json` | Exact source and timeline intervals |
+| `action_integrity_report.json` | Window preservation, provenance and filler counts |
+| `source_report.json` | Source paths, fingerprints, music and analysis details |
+| `render_report.json` | Export duration, dimensions and audio status |
+| `youtube_metadata.json` | Prepared title, description and tags |
+
+`--dry-run` writes the plan and source/integrity reports. It still probes inputs and scans footage, but skips MP4/music rendering and uses a synthetic beat grid. The final render can therefore choose a different action order based on the real soundtrack.
+
+## Commands
+
+| Task | Command |
+|---|---|
+| Prepare library folders | `ultra init` |
+| Show installed dependencies | `ultra doctor` |
+| Boxing edit | `ultra create "Mike Tyson 20 minutes rap US" --sport boxing` |
+| Brazilian funk football edit | `ultra create "Ricardo Quaresma 30 minutes funk do brasil" --sport football` |
+| Require annotation files | `ultra create "Ronaldo 5 min hip-hop" --strict-actions` |
+| Load an explicit project | `ultra create --spec examples/ronaldo.yml` |
+| Inspect all options | `ultra create --help` |
+
+Select tracks explicitly to control their order:
+
+```bash
+ultra create "Naoya Inoue 10 minutes j-pop" \
+  --music library/music/j-pop/song1.mp3 \
+  --music library/music/j-pop/song2.mp3
 ```
 
-Most beat-only editors make cuts on **every musical transient**. For sports, the creative constraint is different:
+`--repeat-music` permits looping the playlist. `--allow-repeat` permits reusing source action intervals. Both are disabled by default. The tool does not detect the same sporting action appearing in different source files or broadcast replays.
 
-1. **Preserve full events.** Dribbles must reach the shot; combinations must show the continuation; goals must retain the outcome. Annotated event windows are immutable.
-2. **Align impacts, not mid-action cuts.** Select an event order whose key moments land near musical beats where possible; otherwise preserve the action instead of forcing perfect beat alignment.
-3. **Retain sports atmosphere.** Original commentary, punches, ball contact and crowd sound can sit beneath the soundtrack.
-4. **No invisible recycling.** Avoid duplicate goals, the same replay, or the same insertion repeated throughout the edit.
-5. **No face/body regeneration.** Only actual source frames are used, with natural framing and a source-derived thumbnail.
+## Action annotations
 
-### Accuracy and integrity (important)
-
-The default scanner uses **motion, cuts and broad context windows**. It is an efficient *candidate finder*, not a fully trained goal/knockout detector. It cannot know with certainty whether a football move finished in a goal, which boxer hit, or whether a true action began before its detected peak. On broadcast footage, replays, camera pans and crowd reactions can trigger false candidates.
-
-For much stronger action integrity, annotate actual action boundaries:
-
-`library/annotations/Cristiano_Ronaldo_2008.json`:
+Put annotations beside a source as `Cristiano_Ronaldo_2008.actions.json`, or in `library/annotations/Cristiano_Ronaldo_2008.json`:
 
 ```json
 {
   "events": [
-    {"start": 115.0, "peak": 122.6, "end": 136.0, "label": "dribble_shot_goal_celebration"},
+    {"start": 115.0, "peak": 122.6, "end": 136.0, "label": "dribble_shot_goal"},
     {"start": 228.5, "peak": 234.2, "end": 245.2, "label": "run_and_cross"}
   ]
 }
 ```
 
-Use `--strict-actions` to **forbid heuristic events** when all genuine action boundaries must be verified. The planner never cuts the specified windows. This protects annotated bounds; it cannot validate incorrect or incomplete human annotations. The report deliberately sets `semantic_completeness_guaranteed: false` for this reason.
+Times are seconds from the start of the source. Imported windows receive up to 0.5 seconds of padding; overlapping windows are merged. Music alignment affects selection and ordering, never a cut inside the selected window.
 
-### Higher-accuracy local video understanding
+`--strict-actions` requires annotation files for every source. These can contain manually marked windows or SoccerNet-style predictions. Predicted timestamps still use heuristic context; strict mode does **not** turn them into verified ground truth. A short remaining duration can be filled with unannotated context and is reported as `filler`.
 
-Install [Ollama](https://ollama.com/) and the small visual model:
+See the [action policy](docs/ACTION_POLICY.md) for reliability levels and the [technical workflow](docs/WORKFLOW.md) for the SoccerNet schema. A specialist spotting model and weights are not bundled.
+
+### Optional visual ranking
+
+With [Ollama](https://ollama.com/) running locally:
 
 ```bash
 ollama pull qwen3-vl:2b
-ultra create "Cristiano Ronaldo 30min hip-hop" --semantic-model qwen3-vl:2b
+ultra create "Cristiano Ronaldo 30 min hip-hop" --semantic-model qwen3-vl:2b
 ```
 
-This local model examines a few still frames per candidate to rank actions versus crowd/graphics. Use `--semantic-limit 0` to tag all candidates (significantly slower). It **does not independently determine reliable action boundaries**. The optional SoccerNet integration accepts externally generated spotting predictions in JSON: the spotting model and pretrained weights are not bundled. See [Action Integrity Policy](docs/ACTION_POLICY.md).
+The model ranks sampled still frames; it does not reliably identify athletes or establish complete action boundaries. `--semantic-limit 0` examines every candidate. `--scene-detect` adds a separate full-resolution scene scan. `--beat-engine librosa` selects the slower beat tracker; the default transient detector uses FFmpeg and NumPy.
 
-### Explicit URL ingest
+### Explicit URL input
 
 ```bash
-ultra create "Ronaldo 30 min hip-hop" \
+ultra create "Ronaldo 5 min hip-hop" \
   --source 'https://example.org/rights-cleared-clip.mp4' \
   --allow-download --rights-confirmed
 ```
 
-Audio can also be obtained from an explicitly supplied authorized URL with `--music-source URL --allow-download --rights-confirmed`. Only explicitly listed URLs are downloaded. The owner/user is responsible for rights to source footage and music and for compliance with source services' terms. An artist or music *style* is **not an authorization to download commercial tracks or publish them to YouTube**. Local library inputs make the one-prompt experience possible without hidden credential handling or arbitrary web scraping.
+Use `--music-source URL` for authorized audio URLs. Downloads are restricted to the URLs you supply; they are cached by URL and retain request order. The command does not search for commercial footage or music from an athlete/style name.
 
-### YAML projects
+For repeatable projects, edit [`examples/ronaldo.yml`](examples/ronaldo.yml). Manifest paths resolve relative to the YAML file. The example points back to the repository's `library/` and `output/` directories; replace its placeholder media paths with your files.
 
-For more control, start with [`examples/ronaldo.yml`](examples/ronaldo.yml):
+## Optional YouTube publishing
+
+1. Enable YouTube Data API v3 in your Google Cloud project and create an OAuth **Desktop** client.
+2. Save its JSON as `~/.config/youtube-edit-ultra/client_secret.json`.
+3. Upload with your account:
 
 ```bash
-ultra create --spec examples/ronaldo.yml
+ultra publish output/cristiano-ronaldo-1800s/montage.mp4 --privacy private
 ```
 
-The YAML can list video paths, URLs and per-video annotation files plus an exact music playlist; CLI flags override the main settings.
+`private` is the default. Choose `--privacy unlisted` or `--privacy public` explicitly when ready. `ultra create ... --publish private` can upload immediately after rendering.
 
-## YouTube publishing
+Successful upload IDs are stored in `montage.youtube.json` to prevent duplicate submissions of that path. Re-running `publish` after success returns the saved video; it does not change that video's visibility. Verify uploads in YouTube Studio before retrying an interrupted upload that has no saved ID. Google project restrictions and Content ID can affect availability; requested visibility is not a guarantee of public publication.
 
-The default is **local only**. Publishing requires your own YouTube Data API OAuth Desktop client:
+## Limits that matter
 
-1. Enable the YouTube Data API v3 for a Google Cloud project and download an OAuth Desktop `client_secret.json`.
-2. Put it at `~/.config/youtube-edit-ultra/client_secret.json` (never commit it).
-3. Run `ultra publish output/<project>/montage.mp4 --privacy private` to sign into your own account once.
-4. When ready, use `--privacy unlisted` or `--privacy public` for a new upload, or `ultra create ... --publish public`.
-
-YouTube API projects created after July 28, 2020 that have **not passed YouTube's compliance audit** may be forced to upload videos as **private**, even if `public` is requested. The tool never claims that an upload is public without checking YouTube Studio. Content ID copyright claims/blocking and music licensing remain applicable. Publishing is an explicit choice, not mandatory.
-
-The uploader stores returned video IDs in `montage.youtube.json` to avoid duplicate posts when invoked again after a successful upload. If a network failure occurs before Google returns an ID, manual checking in YouTube Studio may still be necessary before retrying.
+- The scanner finds movement candidates, including possible camera pans, graphics and replays. No measured goal/KO recognition accuracy is claimed.
+- The integrity report verifies planned window boundaries. It cannot establish whether the source annotations cover the real beginning and end of every action.
+- Exact duration plus whole actions can be impossible even when total footage is long enough. Add usable windows or adjust the target duration.
+- Media files and distribution rights must be supplied by the user. No paid editing API is required; optional external tools retain their own requirements.
+- Long H.264 renders consume CPU time and disk space. Cached clips and optional local model data also occupy storage.
 
 ## Démarrage en français
 
-1. Dépose tes **vidéos sources** dans `library/videos/` avec le nom du sportif dans le fichier.
-2. Dépose les **musiques autorisées** dans `library/music/hip-hop/`, `library/music/reggaeton/`, etc.
-3. Lance `ultra create "Cristiano Ronaldo 30 minutes hip-hop"`.
-4. Récupère `montage.mp4`, `thumbnail.jpg`, `storyboard.jpg`, `edit_plan.json`, les rapports d'intégrité et les informations YouTube dans `output/`.
-5. Si tu souhaites publier, utilise `--publish private|unlisted|public` avec ton compte YouTube connecté.
+Clone le dépôt, lance `bash scripts/bootstrap_mac.sh`, puis active `source .venv/bin/activate`. Dépose tes vidéos dans `library/videos/` avec le nom du sportif et tes musiques dans le dossier du style. Lance `ultra create "Cristiano Ronaldo 5 minutes hip-hop" --dry-run` pour examiner le plan, puis enlève `--dry-run` pour exporter.
 
-**Priorité absolue : l'action sportive.** En cas de conflit entre une coupe musicale et la fin d'un but, d'un KO ou d'un enchaînement, le programme privilégie la fin de l'action. Si la bibliothèque contient trop peu de matière, il affiche une erreur au lieu d'inventer ou de répéter des actions.
+Pour maîtriser le début et la fin d'une action, fournis ses timestamps. La détection automatique reste une aide au repérage. Les vidéos, miniatures et rapports se trouvent dans `output/`. Aucune publication n'a lieu sans commande explicite.
 
-## Quality / limitations
-
-- Designed for local macOS (including Apple Silicon) and Linux, on CPU, with FFmpeg and Python 3.11+. A 30-minute H.264 montage can take substantial disk space and processing time.
-- `--semantic-model` requires a running local Ollama model, `--beat-engine librosa` may incur slow initial numba compilation, and optional `--scene-detect` repeats a full decode.
-- Beat alignment optimizes approximate event impacts, **not** every cut at every beat; sports integrity wins.
-- Accurate athlete identification, multi-player tracking, true goal/KO classification and match-wide event recall require a specialist pre-trained detector plus valid ground truth; they are **not guaranteed** by the included heuristic code.
-- Fully automated production of named-athlete music mixes needs a **pre-authorized source library**. No software can conjure licensed source footage and songs from only a name without additional access or rights.
-- No third-party AGPL sources are vendored; see [third-party components and license notes](THIRD_PARTY.md). Runtime tools retain their own licenses.
-
-## Contributing / tests
+## Development
 
 ```bash
-pip install -e '.[dev]'
-pytest -q
+python -m pip install -e '.[dev]'
+python -m pytest
 ```
 
-Maintainer notes on repository publishing are available in [`docs/GITHUB.md`](docs/GITHUB.md); they are not needed to install or use the editor.
+FFmpeg is required for the media integration tests. The CI workflow runs the suite on Python 3.11, 3.12 and 3.13. Tests cover action preservation, music duration, URL cache isolation, scene-cache separation and thumbnail placement.
 
-See [`docs/WORKFLOW.md`](docs/WORKFLOW.md), [`docs/ACTION_POLICY.md`](docs/ACTION_POLICY.md), and the ready-to-use [Claude Code skill](.claude/skills/youtube-edit-ultra/SKILL.md).
+[Technical workflow](docs/WORKFLOW.md) · [Action policy](docs/ACTION_POLICY.md) · [Maintainer publishing notes](docs/GITHUB.md) · [Third-party components](THIRD_PARTY.md)
 
-**License:** MIT for this project's original source files. Dependencies, example video thumbnails and input media retain their respective rights and licenses.
+**License:** [MIT](LICENSE), copyright Benjamin Da Cunha. Input media and third-party dependencies retain their respective rights and licenses.
