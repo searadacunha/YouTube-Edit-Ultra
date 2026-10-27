@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .banner import print_banner, should_show_banner
 from .events import from_json, find_annotation, validate_no_overlap
 from .media import UltraError, audio_library, check_binaries, download_explicit, download_audio_explicit, fingerprint, probe, slug, video_library
 from .music import build_soundtrack, extract_beats, soundtrack_playlist
@@ -239,15 +240,27 @@ def publish(args: argparse.Namespace) -> int:
     return 0
 
 
+def show_banner(args: argparse.Namespace) -> int:
+    print_banner(sys.stdout)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="ultra", description="Sport-first beat-synchronized video editor")
-    sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("init", help="Préparer les dossiers sources")
+    argv = list(sys.argv[1:] if argv is None else argv)
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--no-banner", action="store_true", default=argparse.SUPPRESS,
+                        help="Masquer le logo automatique au lancement")
+    parser = argparse.ArgumentParser(prog="ultra", description="Sport-first beat-synchronized video editor",
+                                     parents=[common])
+    sub = parser.add_subparsers(dest="command")
+    p = sub.add_parser("banner", help="Afficher le logo YOUTUBE ELIT ULTRA", parents=[common])
+    p.set_defaults(func=show_banner)
+    p = sub.add_parser("init", help="Préparer les dossiers sources", parents=[common])
     p.add_argument("directory", nargs="?", default=".")
     p.set_defaults(func=init)
-    p = sub.add_parser("doctor", help="Afficher les dépendances")
+    p = sub.add_parser("doctor", help="Afficher les dépendances", parents=[common])
     p.set_defaults(func=doctor)
-    p = sub.add_parser("create", help="Fabriquer un mix MP4 et éventuellement le publier")
+    p = sub.add_parser("create", help="Fabriquer un mix MP4 et éventuellement le publier", parents=[common])
     p.add_argument("prompt", nargs="?", default="", help="Ex. 'Cristiano Ronaldo 30 minutes hip-hop'")
     p.add_argument("--spec", help="Fichier YAML de projet")
     p.add_argument("--athlete", help="Nom exact du sportif")
@@ -278,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="fast=FFmpeg+NumPy; librosa=beat tracker plus lent au premier démarrage")
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=create)
-    p = sub.add_parser("publish", help="Uploader un montage existant")
+    p = sub.add_parser("publish", help="Uploader un montage existant", parents=[common])
     p.add_argument("video")
     p.add_argument("--privacy", choices=["private", "unlisted", "public"], default="private")
     p.add_argument("--title")
@@ -286,7 +299,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--metadata")
     p.add_argument("--thumbnail")
     p.set_defaults(func=publish)
+    # Inspect only the display flag before argparse handles --help or errors.
+    display, remaining = common.parse_known_args(argv)
+    explicit_banner = remaining[:1] == ["banner"]
+    if not getattr(display, "no_banner", False) and not explicit_banner and should_show_banner():
+        print_banner(sys.stderr)
     args = parser.parse_args(argv)
+    if args.command is None:
+        parser.print_help()
+        return 0
     try:
         return args.func(args)
     except (UltraError, ValueError, FileNotFoundError) as exc:

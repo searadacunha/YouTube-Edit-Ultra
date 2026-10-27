@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/youtube-elit-ultra.svg" width="960" alt="YOUTUBE ELIT ULTRA — red play logo">
+
 # YouTube-Edit-Ultra
 
 **Sports highlights with complete action windows, music and source audio.**
@@ -105,6 +107,22 @@ ultra doctor
 ```
 
 For local editing without downloads, scene detection or uploads, install with `python -m pip install -e .` instead. Extras are `download`, `scenes` and `youtube`; `all` includes all three.
+
+### Launch screen
+
+Open the **YOUTUBE ELIT ULTRA** launch screen and command overview:
+
+```bash
+ultra
+```
+
+Display just the terminal logo:
+
+```bash
+ultra banner
+```
+
+The logo appears automatically in interactive terminals. Use `ultra --no-banner doctor` to hide it for one command, or set `NO_COLOR=1` to disable colors. Redirected output and CI runs stay free of the automatic banner.
 
 ### Create your first edit
 

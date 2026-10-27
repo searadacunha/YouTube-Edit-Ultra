@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title description">
+  <title id="title">YOUTUBE ELIT ULTRA</title>
+  <desc id="description">A red play mark and the words YOUTUBE ELIT ULTRA on a dark background.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#141B29"/>
+      <stop offset="1" stop-color="#080C13"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF4A64"/>
+      <stop offset="1" stop-color="#D91835"/>
+    </linearGradient>
+    <linearGradient id="rule" gradientUnits="userSpaceOnUse" x1="68" y1="53" x2="1132" y2="53">
+      <stop offset="0" stop-color="#FF304F"/>
+      <stop offset="0.4" stop-color="#FF304F" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FF304F" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="1" y="1" width="1198" height="318" rx="28" fill="url(#background)" stroke="#293244" stroke-width="2"/>
+  <path d="M872 1 662 319M1008 1 798 319M1144 1 934 319" fill="none" stroke="#FFFFFF" stroke-opacity="0.025" stroke-width="64"/>
+  <path d="M68 53H1132" stroke="url(#rule)" stroke-width="2"/>
+
+  <rect x="68" y="98" width="172" height="140" rx="34" fill="#05070B" opacity="0.5"/>
+  <rect x="68" y="88" width="172" height="140" rx="34" fill="url(#red)"/>
+  <path d="M137 124 191 158 137 192Z" fill="#FFFFFF"/>
+  <path d="M87 264H119M132 264H164M177 264H209" stroke="#FF304F" stroke-opacity="0.55" stroke-width="4" stroke-linecap="round"/>
+
+  <g font-family="DejaVu Sans, Arial, Helvetica, sans-serif" font-weight="700">
+    <text x="300" y="113" font-size="34" letter-spacing="9" fill="#E6EBF5">YOUTUBE</text>
+    <text x="293" y="243" font-size="128" letter-spacing="1" xml:space="preserve"><tspan fill="#FF304F">ELIT</tspan><tspan fill="#FFFFFF"> ULTRA</tspan></text>
+  </g>
+</svg>
