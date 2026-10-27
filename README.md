@@ -22,6 +22,8 @@ A local Python + FFmpeg workflow for assembling boxing, football and other sport
 >
 > **Important limit:** automatic motion and scene detection proposes action *candidates*, not verified goals or knockouts. For reliable beginnings and endings, supply event annotations or external spotting predictions. Uploading to YouTube is always optional.
 
+**Engineering status:** the automated test matrix covers Python 3.11–3.13 with FFmpeg on Linux. The editing pipeline is local-first; real-world event recognition quality, third-party model availability and successful YouTube uploads depend on the supplied material and external services. A green CI badge does not validate those outcomes.
+
 ## Inspiration: the kind of edits this project targets
 
 <p align="center">
@@ -101,6 +103,8 @@ Put local source videos in `library/videos/` (include the athlete's name in the 
 ```bash
 ultra create "Cristiano Ronaldo 30 minutes hip-hop"
 ```
+
+Durations in prompts accept compact forms such as `1h15`, `30mn` and `90s`, as well as `--duration` for an explicit override. The requested duration still requires enough permitted footage and music.
 
 The program writes a project directory such as:
 
