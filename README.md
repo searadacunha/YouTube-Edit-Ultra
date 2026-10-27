@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/youtube-elit-ultra.svg" width="960" alt="YOUTUBE ELIT ULTRA — red play logo">
+<img src="docs/assets/youtube-edit-ultra.svg" width="960" alt="YOUTUBE EDIT ULTRA — red play logo">
 
 # YouTube-Edit-Ultra
 
@@ -110,7 +110,7 @@ For local editing without downloads, scene detection or uploads, install with `p
 
 ### Launch screen
 
-Open the **YOUTUBE ELIT ULTRA** launch screen and command overview:
+Open the **YOUTUBE EDIT ULTRA** launch screen and command overview:
 
 ```bash
 ultra

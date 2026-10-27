@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title description">
-  <title id="title">YOUTUBE ELIT ULTRA</title>
-  <desc id="description">A red play mark and the words YOUTUBE ELIT ULTRA on a dark background.</desc>
+  <title id="title">YOUTUBE EDIT ULTRA</title>
+  <desc id="description">A red play mark and the words YOUTUBE EDIT ULTRA on a dark background.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#141B29"/>
@@ -28,6 +28,6 @@
 
   <g font-family="DejaVu Sans, Arial, Helvetica, sans-serif" font-weight="700">
     <text x="300" y="113" font-size="34" letter-spacing="9" fill="#E6EBF5">YOUTUBE</text>
-    <text x="293" y="243" font-size="128" letter-spacing="1" xml:space="preserve"><tspan fill="#FF304F">ELIT</tspan><tspan fill="#FFFFFF"> ULTRA</tspan></text>
+    <text x="293" y="243" font-size="128" letter-spacing="1" xml:space="preserve"><tspan fill="#FF304F">EDIT</tspan><tspan fill="#FFFFFF"> ULTRA</tspan></text>
   </g>
 </svg>

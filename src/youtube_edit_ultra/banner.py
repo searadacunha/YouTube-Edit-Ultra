@@ -7,7 +7,7 @@ import sys
 import textwrap
 from typing import TextIO
 
-TITLE = "YOUTUBE ELIT ULTRA"
+TITLE = "YOUTUBE EDIT ULTRA"
 
 _RED = "\033[91m"
 _WHITE = "\033[1;97m"

@@ -253,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ultra", description="Sport-first beat-synchronized video editor",
                                      parents=[common])
     sub = parser.add_subparsers(dest="command")
-    p = sub.add_parser("banner", help="Afficher le logo YOUTUBE ELIT ULTRA", parents=[common])
+    p = sub.add_parser("banner", help="Afficher le logo YOUTUBE EDIT ULTRA", parents=[common])
     p.set_defaults(func=show_banner)
     p = sub.add_parser("init", help="Préparer les dossiers sources", parents=[common])
     p.add_argument("directory", nargs="?", default=".")
