@@ -10,9 +10,47 @@ A local Python + FFmpeg editor for boxing, football and other sports. Supply foo
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Quick start](#quick-start) · [Commands](#commands) · [Action annotations](#action-annotations) · [Publishing](#optional-youtube-publishing) · [Français](#démarrage-en-français)
+[Videos](#video-spotlight) · [Quick start](#quick-start) · [Commands](#commands) · [Action annotations](#action-annotations) · [Publishing](#optional-youtube-publishing) · [Français](#démarrage-en-français)
 
 </div>
+
+## Video spotlight
+
+Football, boxing and big moments. Click a thumbnail to watch on YouTube.
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="33%">
+      <a href="https://www.youtube.com/watch?v=nzWTKsrIfm0">
+        <img src="https://img.youtube.com/vi/nzWTKsrIfm0/maxresdefault.jpg" width="400" alt="Cristiano Ronaldo — Danza Kuduro, skills and goals 2014">
+      </a>
+      <br><strong>Cristiano Ronaldo</strong>
+      <br><sub>Danza Kuduro · Skills &amp; goals</sub>
+      <br><br><strong>23.5M+ views</strong>
+      <br><sub><a href="https://www.youtube.com/@kiano7hd">KIANO7HD</a></sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="https://www.youtube.com/watch?v=jfpUia2gJjg">
+        <img src="https://img.youtube.com/vi/jfpUia2gJjg/maxresdefault.jpg" width="400" alt="Mike Tyson versus Frank Bruno — full fight replay">
+      </a>
+      <br><strong>Mike Tyson vs Frank Bruno</strong>
+      <br><sub>Full fight replay · Boxing</sub>
+      <br><br><strong>5.3M+ views</strong>
+      <br><sub><a href="https://www.youtube.com/@TNTFightSports">TNT Fight Sports</a></sub>
+    </td>
+    <td align="center" valign="top" width="33%">
+      <a href="https://www.youtube.com/watch?v=JrKv_LpRtK0">
+        <img src="https://img.youtube.com/vi/JrKv_LpRtK0/maxresdefault.jpg" width="400" alt="Naoya Inoue versus Stephen Fulton — fight highlights">
+      </a>
+      <br><strong>Naoya Inoue vs Stephen Fulton</strong>
+      <br><sub>Fight highlights · Boxing</sub>
+      <br><br><strong>3.2M+ views</strong>
+      <br><sub><a href="https://www.youtube.com/@toprank">Top Rank Boxing</a></sub>
+    </td>
+  </tr>
+</table>
+
+<sub>YouTube view counts captured on 27 October 2026 · <a href="docs/VIDEO_GALLERY.md">Video credits &amp; source data</a></sub>
 
 > **Local export is the default.** Uploading requires an explicit command.
 >
