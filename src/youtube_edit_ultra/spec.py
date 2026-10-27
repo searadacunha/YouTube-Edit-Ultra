@@ -1,6 +1,7 @@
 """Describe and validate a sport-first montage without an online AI dependency."""
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -94,8 +95,17 @@ def detect_athlete(prompt: str) -> str:
     return match.group(1).strip() if match else "Sport highlights"
 
 
+# Hours with compact minutes (e.g. 1h15) must be captured as one duration.
+# Otherwise parse_duration() never sees them and silently falls back to 5 minutes.
+PROMPT_DURATION = re.compile(
+    r"(?<!\w)\d+(?:[.,]\d+)?\s*"
+    r"(?:h(?:eures?)?(?:\s*\d{1,2}\s*(?:m(?:n|in(?:utes?)?)?)?)?|"
+    r"m(?:n|in(?:utes?)?)?|s(?:ec(?:ondes?)?)?)\b"
+)
+
+
 def parse_prompt(prompt: str) -> dict[str, Any]:
-    found = re.search(r"\d+(?:[.,]\d+)?\s*(?:h(?:eures?)?|m(?:n|in(?:utes?)?)?|s(?:ec(?:ondes?)?)?)\b(?:\s*\d+(?:[.,]\d+)?\s*(?:m(?:n|in(?:utes?)?)?|s(?:ec(?:ondes?)?)?))?", normalize(prompt))
+    found = PROMPT_DURATION.search(normalize(prompt))
     return {
         "athlete": detect_athlete(prompt),
         "sport": detect_sport(prompt),
@@ -131,12 +141,18 @@ class Settings:
     def __post_init__(self) -> None:
         if self.sport not in SPORT_PRESETS:
             raise ValueError(f"Sport inconnu: {self.sport}")
-        if self.duration_seconds <= 0 or self.duration_seconds > 4 * 3600:
+        if (type(self.duration_seconds) not in (int, float)
+                or not math.isfinite(self.duration_seconds)
+                or not 0 < self.duration_seconds <= 4 * 3600):
             raise ValueError("Durée requise comprise entre 1 seconde et 4 heures")
         if self.publish not in {"none", "private", "unlisted", "public"}:
             raise ValueError("Statut YouTube non valide")
-        if self.width % 2 or self.height % 2:
-            raise ValueError("Résolution paire requise pour H.264")
+        if (type(self.width) is not int or type(self.height) is not int
+                or self.width <= 0 or self.height <= 0
+                or self.width % 2 or self.height % 2):
+            raise ValueError("Résolution positive et paire requise pour H.264")
+        if type(self.fps) is not int or self.fps <= 0:
+            raise ValueError("FPS doit être un entier positif")
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
