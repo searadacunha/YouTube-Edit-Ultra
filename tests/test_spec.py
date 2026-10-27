@@ -1,4 +1,8 @@
-from youtube_edit_ultra.spec import parse_duration, parse_prompt
+from pathlib import Path
+
+import pytest
+
+from youtube_edit_ultra.spec import Settings, parse_duration, parse_prompt
 
 
 def test_duration():
@@ -26,3 +30,19 @@ def test_prompt_boxing():
 def test_compact_duration_and_short_name():
     assert parse_duration("1h15") == 4500
     assert parse_prompt("Ronaldo 30 min hip-hop")["athlete"] == "Ronaldo"
+
+
+def test_prompt_compact_hour_minutes():
+    assert parse_prompt("Cristiano Ronaldo 1h15 hip-hop")["duration_seconds"] == 4500
+    assert parse_prompt("Ronaldo 1h30min rock")["duration_seconds"] == 5400
+    assert parse_prompt("Mike Tyson 1h rap US")["duration_seconds"] == 3600
+
+
+def test_settings_reject_invalid_render_parameters():
+    config = {"athlete": "Tyson", "sport": "boxing", "style": "hip-hop",
+              "duration_seconds": 1800, "output": Path("/tmp/output"),
+              "library": Path("/tmp/library")}
+    for bad in ({"duration_seconds": float("nan")}, {"width": 0},
+                {"height": -2}, {"fps": 0}, {"fps": 30.5}):
+        with pytest.raises(ValueError):
+            Settings(**{**config, **bad})
