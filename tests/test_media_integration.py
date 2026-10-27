@@ -7,6 +7,7 @@ from youtube_edit_ultra.events import make_action
 from youtube_edit_ultra.media import probe, run
 from youtube_edit_ultra.planner import plan_edit
 from youtube_edit_ultra.render import render_edits
+from youtube_edit_ultra.thumbnail import create_thumbnail
 
 
 @pytest.mark.skipif(not shutil.which('ffmpeg'), reason='ffmpeg missing')
@@ -28,3 +29,14 @@ def test_render_preserves_full_action_with_music(tmp_path):
     assert info['has_audio'] and info['has_video']
     assert info['duration'] == pytest.approx(6, abs=.45)
     assert result['resolution'] == '320x180'
+
+    # Centre-anchored text must stay centred and inside a small thumbnail.
+    import numpy as np
+    from PIL import Image
+
+    thumbnail = create_thumbnail(edits[0], "RONALDO", tmp_path / "thumbnail.jpg",
+                                 width=320, height=180)
+    pixels = np.asarray(Image.open(thumbnail))
+    _, xs = np.where(np.all(pixels[120:] > 200, axis=2))
+    assert xs.size > 0
+    assert (int(xs.min()) + int(xs.max())) / 2 == pytest.approx(160, abs=8)

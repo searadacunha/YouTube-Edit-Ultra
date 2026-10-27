@@ -77,8 +77,12 @@ def motion_candidates(motions: list[float], source: Path, *, duration: float, sp
     min_spacing = max(8.0, (pre + post) * 0.75)
     for i in np.argsort(smooth)[::-1]:
         t = float(i) / sample_fps
-        if smooth[i] < threshold or t < 1 or t > duration - 1:
+        if smooth[i] < threshold:
             break
+        # Scores are sorted by strength, not by time. A boundary peak must
+        # not hide lower-scoring actions elsewhere in the source.
+        if t < 1 or t > duration - 1:
+            continue
         if any(abs(t - old) < min_spacing for old in peaks):
             continue
         if cuts and any(abs(t - cut) <= 0.75 for cut in cuts):
@@ -103,7 +107,7 @@ def analyze(source: Path, cache_dir: Path, sport: str, *, scene_detect: bool = F
     if not info["has_video"] or info["duration"] < 1:
         raise UltraError(f"Ce média n'est pas une vidéo valide : {source}")
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_key = f"{fingerprint(source)}-{sport}-v2"
+    cache_key = f"{fingerprint(source)}-{sport}-scenes{int(scene_detect)}-v3"
     cache_path = cache_dir / f"{cache_key}.json"
     if cache_path.exists():
         payload = json.loads(cache_path.read_text())
@@ -122,6 +126,7 @@ def analyze(source: Path, cache_dir: Path, sport: str, *, scene_detect: bool = F
     meta = {"source": str(source), "duration": info["duration"],
             "sampled_frames": len(motion), "detected_cuts": len(cuts),
             "detector": "low_resolution_motion+scene_change",
+            "scene_detection": scene_detect,
             "semantic_events_confirmed": False}
     cache_path.write_text(json.dumps({"actions": [a.as_dict() for a in actions],
                                      "meta": meta}, indent=2))
