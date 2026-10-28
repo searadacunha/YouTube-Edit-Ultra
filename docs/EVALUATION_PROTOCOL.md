@@ -42,8 +42,11 @@ python scripts/evaluate_event_detection.py /path/to/licensed-corpus.json --iou 0
 
 Metrics are window-level precision, recall, false positives, false negatives,
 absolute boundary errors and label accuracy **conditional on already matched
-labelled windows**. Matching uses deterministic greedy one-to-one IoU; it is
-not an optimal assignment solver. The code does not infer that a goal or KO
+labelled windows**. Matching uses deterministic **maximum-cardinality** one-to-one IoU assignment:
+it finds the largest possible number of qualified window matches, even when
+choosing the highest-overlap pair first would block another valid match.
+Within a maximum-size matching, it does not optimize the sum of IoU scores.
+This is an evaluation-only correction and does not alter the event detector. The code does not infer that a goal or KO
 truly happened and cannot verify legal permissions. A missing method is omitted
 from the report, not scored as a failure. An empty prediction list yields an
 undefined precision (`null`), not an invented success rate.

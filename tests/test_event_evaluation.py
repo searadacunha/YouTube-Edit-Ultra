@@ -32,6 +32,24 @@ def test_one_to_one_matching_and_boundary_errors():
     assert "annotation" not in result["methods"]
 
 
+def test_maximum_cardinality_prevents_greedy_true_positive_undercount():
+    # IoUs: truth0/pred0=2/3, truth0/pred1=1/3,
+    # truth1/pred0=3/7, truth1/pred1=2/7.
+    # Greedy takes truth0->pred0 and strands truth1 at threshold 0.30;
+    # the maximum-cardinality assignment uses (0,1), (1,0).
+    truth = [{"start": 0., "end": 2., "label": "goal"},
+             {"start": 0., "end": 7., "label": "save"}]
+    predictions = [{"start": 0., "end": 3., "label": "goal"},
+                   {"start": 1., "end": 3., "label": "save"}]
+    matches = evaluator.maximum_cardinality_matches(truth, predictions, .30)
+    assert matches == [(0, 1), (1, 0)]
+    result = evaluator.evaluate([{"truth": truth, "predictions": {"heuristic": predictions}}], .30)
+    stats = result["methods"]["heuristic"]
+    assert stats["true_positive_windows"] == 2
+    assert stats["false_positive_windows"] == 0
+    assert stats["false_negative_windows"] == 0
+    assert stats["precision"] == stats["recall"] == 1
+
 def test_missing_method_not_counted_as_zero_and_empty_predictions_expose_undefined_precision():
     cases = [
         {"truth": [{"start": 1., "end": 2.}], "predictions": {"heuristic": []}},
