@@ -3,12 +3,32 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import time
 from pathlib import Path
 
 from .media import UltraError
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+
+
+def _write_private_token(path: Path, content: str) -> None:
+    """Atomically replace OAuth credentials, never creating a world-readable file.
+
+    mkstemp creates mode 0600 from the outset. On failure the previous token
+    remains intact and the temporary file is removed.
+    """
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=".token-", suffix=".tmp", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def client():
@@ -20,7 +40,7 @@ def client():
     except ImportError as exc:
         raise UltraError("Option YouTube manquante : pip install '.[youtube]'") from exc
     auth_dir = Path.home() / ".config" / "youtube-edit-ultra"
-    auth_dir.mkdir(parents=True, exist_ok=True)
+    auth_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     token = auth_dir / "token.json"
     secrets = Path(os.environ.get("YEU_CLIENT_SECRETS", str(auth_dir / "client_secret.json")))
     creds = None
@@ -34,11 +54,7 @@ def client():
                 raise UltraError(f"OAuth absent : placer le fichier client_secret.json ici : {secrets}")
             flow = InstalledAppFlow.from_client_secrets_file(str(secrets), scopes=SCOPES)
             creds = flow.run_local_server(port=0)
-        token.write_text(creds.to_json(), encoding="utf-8")
-        try:
-            os.chmod(token, 0o600)
-        except OSError:
-            pass
+        _write_private_token(token, creds.to_json())
     return build("youtube", "v3", credentials=creds)
 
 

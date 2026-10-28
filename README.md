@@ -262,3 +262,12 @@ FFmpeg is required for the media integration tests. The CI workflow runs the sui
 ## Output safety and concurrency
 
 Final video creation writes to a unique partial MP4 in the destination folder, verifies audio/video streams and duration, then replaces the requested output atomically. Failed renders leave an earlier completed output untouched and remove their temporary files. Each invocation uses a private temporary composition directory to avoid manifest/concat collisions; reusable segment files are written through unique partials. This behavior is regression-tested, including a deliberately interrupted synthetic render. It does **not** establish correctness of sport-event detection, which still needs independently annotated real footage.
+
+
+### YouTube OAuth token persistence
+
+Optional YouTube publishing writes the OAuth token through a private mode-0600
+temporary file, then atomically replaces the previous token only after the
+new contents are flushed. If writing fails, existing credentials are retained.
+This is an on-disk safety guarantee exercised with **synthetic** tokens;
+no Google account has been connected or upload attempted in CI.
