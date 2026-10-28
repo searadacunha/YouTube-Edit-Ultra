@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from .media import UltraError, ffmpeg_encode_args, fingerprint, probe, run
 from .planner import Edit
@@ -50,33 +52,47 @@ def render_edits(edits: list[Edit], soundtrack: Path, output: Path, cache_dir: P
         key = hashlib.sha256(payload.encode()).hexdigest()[:24]
         segment = cache_dir / f"clip-{key}.mp4"
         if not segment.is_file():
-            tmp = cache_dir / f".clip-{key}.partial.mp4"
-            print(f"Rendu action {idx}/{len(edits)} : {edit.label} ({edit.duration:.1f}s)")
-            render_segment(edit, tmp, width=width, height=height, fps=fps)
-            tmp.replace(segment)
+            # A unique partial prevents colliding with another invocation.
+            tmp = cache_dir / f".clip-{key}.{uuid.uuid4().hex}.partial.mp4"
+            try:
+                print(f"Rendu action {idx}/{len(edits)} : {edit.label} ({edit.duration:.1f}s)")
+                render_segment(edit, tmp, width=width, height=height, fps=fps)
+                tmp.replace(segment)
+            finally:
+                tmp.unlink(missing_ok=True)
         segments.append(segment)
-    # concat list written in cache_dir, paths escaped for ffmpeg demuxer.
-    lines = ["file '" + str(p.resolve()).replace("'", "'\\''") + "'" for p in segments]
-    manifest = cache_dir / "concat-list.txt"
-    manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    assembled = cache_dir / "assembled-video.mp4"
-    run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-         "-f", "concat", "-safe", "0", "-i", str(manifest), "-c", "copy", str(assembled)])
-    # Two simultaneous sound layers: preserve original stadium/crowd/ring ambience.
-    graph = (f"[0:a:0]volume={source_volume:.4f}[atmo];"
-             f"[1:a:0]volume={music_volume:.4f}[song];"
-             f"[atmo][song]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
-             f"alimiter=limit=0.95[aout]")
-    target = edits[-1].timeline_end
-    run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
-         "-i", str(assembled), "-i", str(soundtrack), "-filter_complex", graph,
-         "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac",
-         "-b:a", "256k", "-t", f"{target:.4f}", "-movflags", "+faststart", str(output)])
-    actual = probe(output)
-    if not actual["has_video"] or not actual["has_audio"]:
-        raise UltraError("Validation MP4 échouée : flux vidéo ou musical absent")
-    if abs(actual["duration"] - target) > 0.45:
-        raise UltraError(f"Durée finale incorrecte : attendu {target:.2f}s, obtenu {actual['duration']:.2f}s")
+
+    # Intermediate concat files are per-run: concurrent renders cannot overwrite
+    # another invocation's manifest or assembled-video.mp4.
+    with TemporaryDirectory(prefix=".compose-", dir=cache_dir) as work:
+        scratch = Path(work)
+        lines = ["file '" + str(p.resolve()).replace("'", "'\\''") + "'" for p in segments]
+        manifest = scratch / "concat-list.txt"
+        manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        assembled = scratch / "assembled-video.mp4"
+        run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+             "-f", "concat", "-safe", "0", "-i", str(manifest), "-c", "copy", str(assembled)])
+        graph = (f"[0:a:0]volume={source_volume:.4f}[atmo];"
+                 f"[1:a:0]volume={music_volume:.4f}[song];"
+                 f"[atmo][song]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
+                 f"alimiter=limit=0.95[aout]")
+        target = edits[-1].timeline_end
+        # FFmpeg must never overwrite an existing completed output while it is
+        # still rendering; validate the private partial before atomic replacement.
+        partial = output.with_name(f".{output.stem}.{uuid.uuid4().hex}.partial{output.suffix}")
+        try:
+            run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                 "-i", str(assembled), "-i", str(soundtrack), "-filter_complex", graph,
+                 "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac",
+                 "-b:a", "256k", "-t", f"{target:.4f}", "-movflags", "+faststart", str(partial)])
+            actual = probe(partial)
+            if not actual["has_video"] or not actual["has_audio"]:
+                raise UltraError("Validation MP4 échouée : flux vidéo ou musical absent")
+            if abs(actual["duration"] - target) > 0.45:
+                raise UltraError(f"Durée finale incorrecte : attendu {target:.2f}s, obtenu {actual['duration']:.2f}s")
+            partial.replace(output)
+        finally:
+            partial.unlink(missing_ok=True)
     return {"output": str(output), "duration": actual["duration"],
             "resolution": f"{actual['width']}x{actual['height']}",
             "audio_mixed": True, "source_ambience_volume": source_volume}

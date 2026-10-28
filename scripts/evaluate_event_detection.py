@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Offline metrics for HUMAN-ANNOTATED event windows and declared prediction sources.
+
+This does not identify a goal/KO or assert footage rights. The caller provides
+labels and predictions; matching is deterministic greedy 1:1 IoU.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import statistics
+from pathlib import Path
+
+METHODS = ("heuristic", "vlm", "annotation")
+
+
+def validate_windows(rows: object, location: str) -> list[dict]:
+    if not isinstance(rows, list):
+        raise ValueError(f"{location}: expected list of event windows")
+    cleaned = []
+    for i, entry in enumerate(rows):
+        if not isinstance(entry, dict):
+            raise ValueError(f"{location}[{i}]: expected object")
+        start, end = entry.get("start"), entry.get("end")
+        if (type(start) not in (int, float) or type(end) not in (int, float)
+                or not math.isfinite(start) or not math.isfinite(end)
+                or not 0 <= start < end):
+            raise ValueError(f"{location}[{i}]: invalid time window")
+        label = entry.get("label")
+        if label is not None and (not isinstance(label, str) or not label.strip()):
+            raise ValueError(f"{location}[{i}]: invalid event label")
+        cleaned.append({"start": float(start), "end": float(end),
+                        "label": label.strip() if label else None})
+    return cleaned
+
+
+def read_cases(path: Path) -> list[dict]:
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict) or not isinstance(document.get("cases"), list):
+        raise ValueError("Expected an object with cases array")
+    if not document["cases"]:
+        raise ValueError("Dataset has no evaluation cases")
+    parsed = []
+    for i, case in enumerate(document["cases"]):
+        if not isinstance(case, dict):
+            raise ValueError(f"Case {i}: expected object")
+        if not isinstance(case.get("source_id"), str) or not case["source_id"].strip():
+            raise ValueError(f"Case {i}: source_id is required")
+        # Rights are stated by the submitter, not verified by the evaluator.
+        if not isinstance(case.get("rights"), str) or not case["rights"].strip():
+            raise ValueError(f"Case {i}: rights/provenance statement required")
+        predictions = case.get("predictions")
+        if not isinstance(predictions, dict) or not predictions:
+            raise ValueError(f"Case {i}: predictions must name at least one method")
+        if set(predictions) - set(METHODS):
+            raise ValueError(f"Case {i}: unknown prediction method")
+        parsed.append({
+            "source_id": case["source_id"],
+            "rights": case["rights"],
+            "truth": validate_windows(case.get("truth"), f"case {i}.truth"),
+            "predictions": {name: validate_windows(rows, f"case {i}.{name}")
+                            for name, rows in predictions.items()},
+        })
+    return parsed
+
+
+def iou(a: dict, b: dict) -> float:
+    overlap = max(0., min(a["end"], b["end"]) - max(a["start"], b["start"]))
+    union = max(a["end"], b["end"]) - min(a["start"], b["start"])
+    return overlap / union if union > 0 else 0.0
+
+
+def maximum_cardinality_matches(truth: list[dict], predicted: list[dict],
+                               threshold: float) -> list[tuple[int, int]]:
+    """Maximum number of independent IoU-qualified matches.
+
+    Deterministic augmenting paths, with descending IoU for each truth window.
+    Maximizes TP count; does NOT guarantee a maximum sum of IoUs.
+    """
+    adjacency: list[list[int]] = []
+    for actual in truth:
+        candidates = []
+        for j, proposal in enumerate(predicted):
+            overlap = iou(actual, proposal)
+            if overlap >= threshold:
+                candidates.append((overlap, j))
+        adjacency.append([j for _, j in sorted(candidates, key=lambda x: (-x[0], x[1]))])
+
+    owner_by_prediction: dict[int, int] = {}
+
+    def augment(truth_index: int, seen: set[int]) -> bool:
+        for prediction_index in adjacency[truth_index]:
+            if prediction_index in seen:
+                continue
+            seen.add(prediction_index)
+            owner = owner_by_prediction.get(prediction_index)
+            if owner is None or augment(owner, seen):
+                owner_by_prediction[prediction_index] = truth_index
+                return True
+        return False
+
+    for index in range(len(truth)):
+        augment(index, set())
+    return sorted(((i, j) for j, i in owner_by_prediction.items()))
+
+
+def greedy_matches(truth: list[dict], predicted: list[dict], threshold: float) -> list[tuple[int, int]]:
+    """Compatibility wrapper; uses the more accurate maximum-cardinality rule."""
+    return maximum_cardinality_matches(truth, predicted, threshold)
+
+def evaluate(cases: list[dict], threshold: float = 0.5) -> dict:
+    if not isinstance(threshold, (int, float)) or not math.isfinite(threshold) or not 0 < threshold <= 1:
+        raise ValueError("IoU threshold must be within (0, 1]")
+    result = {"iou_threshold": threshold,
+              "matching": "maximum-cardinality one-to-one IoU threshold; independent of labels (IoU sum not optimized)",
+              "source_rights_independently_verified": False,
+              "methods": {}}
+    for method in METHODS:
+        truth_n = pred_n = tp = labels_compared = labels_correct = 0
+        start_errors, end_errors = [], []
+        covered = 0
+        for case in cases:
+            if method not in case["predictions"]:
+                continue  # Missing predictions are NOT treated as a zero-performing method.
+            covered += 1
+            truth, predictions = case["truth"], case["predictions"][method]
+            truth_n += len(truth)
+            pred_n += len(predictions)
+            matches = maximum_cardinality_matches(truth, predictions, threshold)
+            tp += len(matches)
+            for i, j in matches:
+                t, p = truth[i], predictions[j]
+                start_errors.append(abs(t["start"] - p["start"]))
+                end_errors.append(abs(t["end"] - p["end"]))
+                if t["label"] is not None and p["label"] is not None:
+                    labels_compared += 1
+                    labels_correct += t["label"] == p["label"]
+        if not covered:
+            continue
+        fp, fn = pred_n - tp, truth_n - tp
+        result["methods"][method] = {
+            "cases_evaluated": covered, "truth_events": truth_n,
+            "predicted_events": pred_n, "true_positive_windows": tp,
+            "false_positive_windows": fp, "false_negative_windows": fn,
+            "precision": tp / pred_n if pred_n else None,
+            "recall": tp / truth_n if truth_n else None,
+            "false_positive_fraction": fp / pred_n if pred_n else None,
+            "mean_abs_start_error_seconds": statistics.mean(start_errors) if start_errors else None,
+            "mean_abs_end_error_seconds": statistics.mean(end_errors) if end_errors else None,
+            "label_comparisons": labels_compared,
+            "label_accuracy_given_matched_and_labelled":
+                labels_correct / labels_compared if labels_compared else None,
+        }
+    return result
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("dataset", type=Path)
+    parser.add_argument("--iou", type=float, default=0.5)
+    parser.add_argument("--output", type=Path)
+    options = parser.parse_args()
+    report = json.dumps(evaluate(read_cases(options.dataset), options.iou),
+                        indent=2, sort_keys=True) + "\n"
+    if options.output:
+        options.output.write_text(report, encoding="utf-8")
+    else:
+        print(report, end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
