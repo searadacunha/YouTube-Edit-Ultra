@@ -39,3 +39,20 @@ def test_scene_detection_has_its_own_cache(tmp_path, monkeypatch):
     assert fast["scene_detection"] is False
     assert scenes["scene_detection"] is True
     assert cached == scenes
+
+
+def test_uniform_camera_motion_is_not_an_action(tmp_path):
+    # Previously every equally high score reached the percentile threshold,
+    # producing repeated false event candidates during sustained camera motion.
+    actions = motion_candidates([20.0] * 120, tmp_path / "pan.mp4",
+                                duration=60, sport="football")
+    assert actions == []
+
+
+def test_local_motion_burst_still_produces_candidate(tmp_path):
+    motions = [2.0] * 120
+    motions[48:58] = [35.0] * 10
+    actions = motion_candidates(motions, tmp_path / "burst.mp4",
+                                duration=60, sport="boxing")
+    assert any(23 <= event.peak <= 29 for event in actions)
+    assert all(event.provenance == "heuristic" for event in actions)

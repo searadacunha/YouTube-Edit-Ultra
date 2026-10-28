@@ -72,7 +72,13 @@ def motion_candidates(motions: list[float], source: Path, *, duration: float, sp
         smooth = np.convolve(scores, np.ones(5) / 5, mode="same")
     else:
         smooth = scores
-    threshold = max(6.0, float(np.percentile(smooth, 72)))
+    # A sustained camera pan can give every frame a high absolute difference.
+    # Require a local burst above the video's own median activity; a uniform
+    # high-motion baseline is not evidence of repeated sporting actions.
+    baseline = float(np.median(smooth))
+    deviation = float(np.median(np.abs(smooth - baseline)))
+    threshold = max(6.0, float(np.percentile(smooth, 72)),
+                    baseline + max(2.0, 1.5 * deviation))
     peaks = []
     min_spacing = max(8.0, (pre + post) * 0.75)
     for i in np.argsort(smooth)[::-1]:
@@ -107,7 +113,7 @@ def analyze(source: Path, cache_dir: Path, sport: str, *, scene_detect: bool = F
     if not info["has_video"] or info["duration"] < 1:
         raise UltraError(f"Ce média n'est pas une vidéo valide : {source}")
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_key = f"{fingerprint(source)}-{sport}-scenes{int(scene_detect)}-v3"
+    cache_key = f"{fingerprint(source)}-{sport}-scenes{int(scene_detect)}-v4"
     cache_path = cache_dir / f"{cache_key}.json"
     if cache_path.exists():
         payload = json.loads(cache_path.read_text())

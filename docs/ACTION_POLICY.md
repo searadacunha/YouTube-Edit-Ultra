@@ -17,7 +17,7 @@ These offsets apply to a detected peak, not to an already marked entire event. T
 
 1. **Manual ground truth** (`.actions.json`): exact user-supplied start/peak/end. The renderer must keep the interval intact, barring an incorrect annotation.
 2. **SoccerNet-style action spotting** (`predictions` with timestamp): a pretrained specialist model's impact time plus protective sport windows. Accuracy depends on training/domain; exact full sequence is not established merely by a timestamp.
-3. **Automatic motion with optional Qwen3-VL**: candidate action bursts with broad protection. False positives from camera cuts, replays and celebrations are possible. Semantic action completeness is not guaranteed.
+3. **Automatic motion with optional Qwen3-VL**: candidate action bursts with broad protection. A local-salience threshold rejects uniform high-motion baselines (such as sustained camera movement), but camera cuts, replays and celebrations can still create false positives. Higher thresholds may also miss subtle actions. No measured sports-event precision/recall is claimed without labeled videos. Semantic action completeness is not guaranteed.
 
 ## Hard rules
 
