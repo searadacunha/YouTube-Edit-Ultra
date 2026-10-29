@@ -53,7 +53,7 @@ def _build_settings(args: argparse.Namespace, manifest: dict, base: Path) -> Set
 
 def _collect_videos(args: argparse.Namespace, manifest: dict, settings: Settings,
                     base: Path) -> tuple[list[Path], dict[str, Path]]:
-    videos: set[Path] = set(video_library(settings.library, settings.athlete, all_library=args.all_library))
+    videos: set[Path] = set() if manifest.get("sources_only") else set(video_library(settings.library, settings.athlete, all_library=args.all_library))
     annotations: dict[str, Path] = {}
     urls = list(args.source or [])
     for v in args.video or []:
@@ -132,7 +132,7 @@ def create(args: argparse.Namespace) -> int:
     settings = _build_settings(args, manifest, base)
     check_binaries()
     settings.output.mkdir(parents=True, exist_ok=True)
-    cache_dir = settings.output / "cache"
+    cache_dir = _path(manifest["cache_dir"], base) if manifest.get("cache_dir") else settings.output / "cache"
     videos, forced_annotations = _collect_videos(args, manifest, settings, base)
     music = _collect_music(args, manifest, settings, base)
     # Preflight duration before spending time scanning sources.
@@ -173,6 +173,8 @@ def create(args: argparse.Namespace) -> int:
         soundtrack = cache_dir / "soundtrack.m4a"
         chosen = build_soundtrack(music, settings.duration_seconds, soundtrack,
                                   repeat=settings.allow_music_repeat)
+        write_json(settings.output / "audio_levels.json",
+                   json.loads(soundtrack.with_suffix(".levels.json").read_text()))
         music = chosen
         beats = extract_beats(soundtrack, engine=args.beat_engine)
     print(f"Actions candidates : {len(actions)} | Beats : {len(beats)}")
@@ -217,6 +219,12 @@ def init(args: argparse.Namespace) -> int:
 def doctor(args: argparse.Namespace) -> int:
     for name in ("python", "ffmpeg", "ffprobe", "yt-dlp", "gh"):
         print(f"{name:8s}: {shutil.which('python3' if name == 'python' else name) or 'non installé'}")
+    from .media import downloader_command, run
+    try:
+        command = downloader_command()
+        print(f"yt-dlp utilisé : {' '.join(command)} ({run(command + ['--version']).strip()})")
+    except UltraError as e:
+        print(f"yt-dlp utilisé : {e}")
     for module in ("numpy", "librosa", "cv2", "scenedetect", "googleapiclient", "yt_dlp"):
         try:
             __import__(module)
@@ -304,6 +312,8 @@ def main(argv: list[str] | None = None) -> int:
     explicit_banner = remaining[:1] == ["banner"]
     if not getattr(display, "no_banner", False) and not explicit_banner and should_show_banner():
         print_banner(sys.stderr)
+    from .produce import add_commands
+    add_commands(sub)
     args = parser.parse_args(argv)
     if args.command is None:
         parser.print_help()

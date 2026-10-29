@@ -69,6 +69,24 @@ Skills, goals and music. Click a thumbnail to watch on YouTube.
 
 Football, boxing, MMA, basketball and generic presets provide different amounts of context around detected motion. The planner preserves each **selected window**; annotation quality determines whether that window contains the complete real-world action.
 
+## Autonomous production
+
+```bash
+ultra produce "Canelo Alvarez 30 minutes reggaeton"
+ultra produce "Terence Crawford 30 minutes R&B 2000s"
+```
+
+`produce` scans your Mac, remembers source permissions and song usage, searches public
+video metadata, downloads permitted sources, calls the existing editor, and decodes
+and checks the output. Spotify uses authenticated, complete pagination for metadata;
+audio must come from accessible authorized files. Initial permission and Spotify
+setup persist across projects. Missing resources yield an explicit blocked report.
+Automatic sports candidates still require visual review; no KO-recognition guarantee.
+
+See [shared autonomous workflow](docs/AUTONOMOUS_WORKFLOW.md) for setup, reports and
+limits, and [legacy/recovery evidence](docs/LEGACY_RECOVERY.md) for the old workflow.
+`create` remains available for explicit inputs. Neither command publishes by default.
+
 ## Quick start
 
 ### macOS: Apple Silicon or Intel
@@ -257,3 +275,7 @@ FFmpeg is required for the media integration tests. The CI workflow runs the sui
 [Technical workflow](docs/WORKFLOW.md) · [Action policy](docs/ACTION_POLICY.md) · [Maintainer publishing notes](docs/GITHUB.md) · [Third-party components](THIRD_PARTY.md)
 
 **License:** [MIT](LICENSE), copyright Benjamin Da Cunha. Input media and third-party dependencies retain their respective rights and licenses.
+
+Historical production evidence, restored components and real-media acceptance: [legacy execution diagnosis](docs/LEGACY_EXECUTION_DIAGNOSIS.md). The real-media demonstration is 16 seconds; synthetic tests and this demo do not certify KO recognition or a 30-minute production.
+
+Current acceptance status: [30-minute production validation](docs/PRODUCTION_VALIDATION.md) — **not validated**. Real acquisition and local cache reuse succeeded; a complete authorized 30-minute input set and editorial validation remain missing. Genre-only requests can continue with authorized local audio when Spotify is unavailable; explicitly requested playlists remain binding.

@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
-import os
+import math
 import re
 import shutil
 import subprocess
+import sys
+import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -16,6 +19,16 @@ AUDIO_EXT = {".mp3", ".m4a", ".flac", ".wav", ".aac", ".ogg"}
 
 class UltraError(RuntimeError):
     """Actionable editing error."""
+
+
+def downloader_command() -> list[str]:
+    # Use this installation's dependency, not a stale global executable.
+    if importlib.util.find_spec("yt_dlp") is not None:
+        return [sys.executable, "-m", "yt_dlp"]
+    executable = shutil.which("yt-dlp")
+    if executable:
+        return [executable]
+    raise UltraError("Installer le téléchargeur : pip install '.[download]'")
 
 
 def run(command: list[str], *, quiet: bool = True) -> str:
@@ -80,15 +93,43 @@ def load_url_list(path: Path) -> list[str]:
     return [x.strip() for x in path.read_text().splitlines() if x.strip() and not x.startswith("#")]
 
 
+def download_direct(url: str, folder: Path, kind: str) -> Path | None:
+    """Fetch an explicitly permitted original media link, with no extractor or login."""
+    parts = urlparse(url)
+    suffix = Path(parts.path).suffix.lower()
+    if parts.scheme != "https" or suffix not in VIDEO_EXT | AUDIO_EXT:
+        return None
+    if not parts.hostname or parts.username or parts.password:
+        raise UltraError("URL directe invalide")
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / (kind + "-" + hashlib.sha256(url.encode()).hexdigest()[:20] + suffix)
+    candidate = target
+    if not target.exists():
+        if not shutil.which("curl"):
+            raise UltraError("curl absent pour le lien de média original")
+        candidate = target.with_name(target.name + "." + uuid.uuid4().hex + ".partial")
+        run(["curl", "--fail", "--location", "--silent", "--show-error",
+             "--proto", "=https", "--proto-redir", "=https", "--max-time", "600",
+             "--output", str(candidate), "--", url])
+    info = probe(candidate)
+    if not math.isfinite(info["duration"]) or info["duration"] <= 0 or not info["has_" + kind]:
+        raise UltraError("Média direct invalide (conservé pour diagnostic) : " + str(candidate))
+    if candidate != target:
+        candidate.rename(target)
+    return target
+
+
 def download_explicit(urls: list[str], folder: Path) -> list[Path]:
     """Download ONLY explicitly supplied sources; caller attests it has rights/permission."""
     if not urls:
         return []
-    if not shutil.which("yt-dlp"):
-        raise UltraError("Installer l'option download : pip install '.[download]' ou brew install yt-dlp")
     folder.mkdir(parents=True, exist_ok=True)
     result: list[Path] = []
     for url in urls:
+        direct = download_direct(url, folder, "video")
+        if direct:
+            result.append(direct)
+            continue
         parts = urlparse(url)
         if parts.scheme not in {"http", "https"} or not parts.hostname:
             raise UltraError(f"URL non HTTP(S) : {url!r}")
@@ -98,7 +139,7 @@ def download_explicit(urls: list[str], folder: Path) -> list[Path]:
         # never make an idempotent rerun import another source's old files.
         prefix = "source-" + hashlib.sha256(url.encode()).hexdigest()[:20]
         pattern = str(folder / f"{prefix}-%(id)s.%(ext)s")
-        run(["yt-dlp", "--no-playlist", "--no-overwrites", "--restrict-filenames", "-f", "bv*+ba/b",
+        run([*downloader_command(), "--ignore-config", "--socket-timeout", "30", "--retries", "2", "--no-playlist", "--no-overwrites", "--restrict-filenames", "-f", "bv*+ba/b",
              "--merge-output-format", "mp4", "-o", pattern, "--", url])
         new = sorted(p for p in folder.glob(f"{prefix}-*")
                      if p.is_file() and p.suffix.lower() in VIDEO_EXT)
@@ -117,18 +158,20 @@ def download_audio_explicit(urls: list[str], folder: Path) -> list[Path]:
     """Extract audio ONLY from user-specified, authorized URLs (not a genre crawler)."""
     if not urls:
         return []
-    if not shutil.which("yt-dlp"):
-        raise UltraError("Installer le téléchargeur audio : pip install '.[download]'")
     folder.mkdir(parents=True, exist_ok=True)
     result = []
     for url in urls:
+        direct = download_direct(url, folder, "audio")
+        if direct:
+            result.append(direct)
+            continue
         parts = urlparse(url)
         if parts.scheme not in {"https", "http"} or not parts.hostname:
             raise UltraError(f"URL audio invalide : {url!r}")
         if parts.username or parts.password:
             raise UltraError("URL audio avec identifiants refusée")
         prefix = "music-" + hashlib.sha256(url.encode()).hexdigest()[:20]
-        run(["yt-dlp", "--no-playlist", "--no-overwrites", "--restrict-filenames",
+        run([*downloader_command(), "--ignore-config", "--socket-timeout", "30", "--retries", "2", "--no-playlist", "--no-overwrites", "--restrict-filenames",
              "-f", "ba/b", "-x", "--audio-format", "mp3", "--audio-quality", "0",
              "-o", str(folder / f"{prefix}-%(id)s.%(ext)s"), "--", url])
         new = sorted(p for p in folder.glob(f"{prefix}-*.mp3") if p.is_file())

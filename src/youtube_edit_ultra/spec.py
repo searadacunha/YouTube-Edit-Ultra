@@ -22,13 +22,14 @@ SPORT_PRESETS: dict[str, dict[str, float]] = {
 ATHLETE_SPORT = {
     "ronaldo": "football", "quaresma": "football", "haaland": "football",
     "goncalves": "football", "messi": "football", "neymar": "football",
-    "tyson": "boxing", "mayweather": "boxing", "inoue": "boxing",
+    "crawford": "boxing", "tyson": "boxing", "mayweather": "boxing", "inoue": "boxing",
     "maidana": "boxing", "valero": "boxing", "canelo": "boxing",
     "muratalla": "boxing", "da cunha": "boxing", "duran": "boxing",
 }
 STYLE_KEYS = {
+    "orchestral": "orchestral", "classical": "classical",
     "funk": "funk-brasileiro", "funk do brasil": "funk-brasileiro",
-    "reggaeton": "reggaeton", "hip hop": "hip-hop", "hip-hop": "hip-hop",
+    "r&b 2000s": "rnb-2000s", "rnb 2000s": "rnb-2000s", "r&b": "rnb", "reggaeton": "reggaeton", "hip hop": "hip-hop", "hip-hop": "hip-hop",
     "rap us": "hip-hop", "trap": "trap", "j-pop": "j-pop",
     "jpop": "j-pop", "punk rock": "punk-rock", "rock": "rock",
     "juice wrld": "juice-wrld", "phonk": "phonk", "electro": "electronic",
@@ -83,7 +84,7 @@ def detect_sport(prompt: str) -> str:
 
 def detect_athlete(prompt: str) -> str:
     for name in ("Cristiano Ronaldo", "Ricardo Quaresma", "Erling Haaland", "Flavio Goncalves",
-                 "Mike Tyson", "Floyd Mayweather", "Naoya Inoue", "Marcos Maidana",
+                 "Terence Crawford", "Mike Tyson", "Floyd Mayweather", "Naoya Inoue", "Marcos Maidana",
                  "Edwin Valero", "Benjamin Da Cunha", "Raymond Muratalla", "Canelo Alvarez",
                  "Lionel Messi", "Neymar"):
         if normalize(name) in normalize(prompt):
@@ -92,7 +93,15 @@ def detect_athlete(prompt: str) -> str:
         if re.search(r"\b" + re.escape(key) + r"\b", normalize(prompt)):
             return key.title()
     match = re.search(r"(?:de|sur|avec|montage|mix|highlights)\s+([\wÀ-ÿ][\wÀ-ÿ .'-]{2,60}?)(?:\s+\d+\s*(?:h|m)|\s+(?:avec|sur|en|musique|style)|[,;.\n]|$)", prompt, re.I)
-    return match.group(1).strip() if match else "Sport highlights"
+    if match:
+        return match.group(1).strip()
+    # The documented one-prompt syntax also accepts subjects outside the presets.
+    match = PROMPT_DURATION.search(normalize(prompt))
+    if match:
+        subject = normalize(prompt)[:match.start()].strip(" ,:-")
+        if subject and re.fullmatch(r"[\w .'-]+", subject):
+            return subject.title()
+    return "Sport highlights"
 
 
 # Hours with compact minutes (e.g. 1h15) must be captured as one duration.

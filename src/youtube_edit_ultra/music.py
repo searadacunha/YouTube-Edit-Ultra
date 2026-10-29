@@ -2,9 +2,30 @@
 from __future__ import annotations
 
 import math
+import json
+import subprocess
 from pathlib import Path
 
 from .media import UltraError, probe, run
+
+
+def measure_loudness(path: Path) -> dict:
+    """Reuse the measured static-gain approach from Boxing-Tubeviz/remix_hiphop90s.py."""
+    cp = subprocess.run([
+        "ffmpeg", "-hide_banner", "-nostdin", "-i", str(path), "-vn",
+        "-af", "loudnorm=I=-18:TP=-3:LRA=11:print_format=json", "-f", "null", "-"
+    ], capture_output=True, text=True)
+    if cp.returncode:
+        raise UltraError("Mesure musicale échouée : " + cp.stderr[-800:])
+    try:
+        data = json.JSONDecoder().raw_decode(cp.stderr[cp.stderr.rfind("{"):])[0]
+        level, peak = float(data["input_i"]), float(data["input_tp"])
+        if not math.isfinite(level) or not math.isfinite(peak):
+            raise ValueError("piste silencieuse ou trop courte pour LUFS")
+    except (ValueError, KeyError) as e:
+        raise UltraError(f"Mesure musicale invalide pour {path}: {e}") from e
+    return dict(path=str(path), integrated_lufs=level, true_peak_dbtp=peak,
+                gain_db=round(min(-18 - level, -3 - peak), 4))
 
 
 def soundtrack_playlist(paths: list[Path], required: float, *, allow_repeat: bool = False,
@@ -38,15 +59,17 @@ def build_soundtrack(paths: list[Path], target: float, out: Path, *, repeat: boo
     """Crossfade tracks, then trim to precisely the requested duration."""
     out.parent.mkdir(parents=True, exist_ok=True)
     chosen = soundtrack_playlist(paths, target, allow_repeat=repeat, fade=fade)
+    levels = [measure_loudness(path) for path in chosen]
+    out.with_suffix(".levels.json").write_text(json.dumps(levels, indent=2) + "\n")
     filters = []
     for i in range(len(chosen)):
-        filters.append(f"[{i}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,asetpts=PTS-STARTPTS[a{i}]")
+        filters.append(f"[{i}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume={levels[i]['gain_db']}dB,asetpts=PTS-STARTPTS[a{i}]")
     left = "a0"
     for i in range(1, len(chosen)):
         new = f"mix{i}"
         filters.append(f"[{left}][a{i}]acrossfade=d={fade}:c1=tri:c2=tri[{new}]")
         left = new
-    filters.append(f"[{left}]atrim=0:{target:.4f},asetpts=PTS-STARTPTS[final]")
+    filters.append(f"[{left}]atrim=0:{target:.4f},afade=t=out:st={max(0, target - 0.5):.4f}:d=0.5,asetpts=PTS-STARTPTS[final]")
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
     for path in chosen:
         cmd += ["-i", str(path)]
