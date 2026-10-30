@@ -1,22 +1,26 @@
-# Publish YouTube-Edit-Ultra to GitHub
+# Publish reviewed code to the configured GitHub repository
 
-Default repository destination: `searadacunha/YouTube-Edit-Ultra`.
+The repository is public. Keep footage, music, OAuth credentials, local production
+manifests, private journals and licence documents out of **every outgoing commit**,
+not just the final working tree. `.gitignore` does not remove tracked history.
 
-On macOS:
+Review the diff, run `python -m pytest` and `ruff check src tests --select E9,F`,
+then stage explicit public paths and commit them. The helper requires an existing,
+authenticated `gh`, a clean checkout and the intended `origin`:
 
 ```bash
-cd ~/Downloads/YouTube-Edit-Ultra   # adjust to where you unzipped it
-brew install gh
-gh auth login
 ./scripts/publish_github.sh
 ```
 
-The script creates a clean `main` branch, commits the original source files, creates a **public** GitHub repository if it does not already exist, and pushes `main`. If the repo exists, it pushes your current branch to `main` instead. Neither raw video/music files nor OAuth tokens are committed (`.gitignore`).
+It fetches the remote and pushes reviewed commits to `main` only when that is a
+fast-forward. It does not stage files, initialize a repository, create a public
+repository, rewrite history or override a failed check. `GITHUB_OWNER` and
+`GITHUB_REPO` can select another already configured repository.
 
-To use a different owner/name:
+The path denylist is a safeguard, not a complete secret scanner. Review the actual
+patch and outgoing history. If local-only commits contain private production
+notes, retain that local branch and prepare a separate branch from `origin/main`
+containing only the reviewed public changes.
 
-```bash
-GITHUB_OWNER=your-handle GITHUB_REPO=YouTube-Edit-Ultra ./scripts/publish_github.sh
-```
-
-The repository is not considered published until GitHub CLI returns its actual `https://github.com/...` URL. A local ZIP is not itself a remote GitHub repository.
+Verify the remote commit SHA and GitHub Actions after pushing. A successful local
+commit or a repository URL alone is not evidence of a successful remote update.

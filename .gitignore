@@ -22,3 +22,17 @@ token.json
 client_secret.json
 credentials.json
 *.secret.json
+# Local production notes and private rights evidence do not belong on public GitHub.
+JOURNAL_AGENTS.md
+*.private.json
+*.private.md
+*.mp4
+*.mov
+*.mkv
+*.mp3
+*.m4a
+*.wav
+*.flac
+build/
+dist/
+.worktrees/
