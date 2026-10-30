@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from . import catalogue as cat, spotify
-from .media import UltraError, download_explicit, download_audio_explicit, downloader_command, run, slug
+from .media import UltraError, download_explicit, download_audio_explicit, downloader_command, slug
 from .spec import parse_prompt, normalize
 
 
@@ -108,6 +108,14 @@ def resolve_playlist(folder, config, style, explicit):
         return None, None, status
 
 
+def athlete_match(text, athlete):
+    words = normalize(athlete).split()
+    normalized = normalize(text)
+    if all(re.search(r"\b" + re.escape(w) + r"\b", normalized) for w in words):
+        return True
+    return normalize(athlete) == "canelo alvarez" and bool(re.search(r"\bcanelo\b", normalized))
+
+
 def relevant_video(row, athlete):
     path = Path(row["path"])
     # A user's home directory is not an athlete tag (e.g. /Users/benjamindacunha).
@@ -116,17 +124,41 @@ def relevant_video(row, athlete):
     except ValueError:
         pass
     text = normalize((row.get("title") or "") + " " + str(path))
-    return row["kind"] == "video" and all(w in text for w in normalize(athlete).split())
+    return row["kind"] == "video" and athlete_match(text, athlete)
 
 
-def readiness(state, athlete, target, videos, music, style=""):
+def annotated_coverage(videos, sport):
+    from .events import from_json, validate_no_overlap
+    actions = []
+    for row in {r['sha256']: r for r in videos}.values():
+        source = Path(row['path'])
+        annotation = source.with_suffix('.actions.json')
+        shots = source.with_suffix('.shots.json')
+        if shots.is_file():
+            from .events import Action
+            for shot in cat.read(shots):
+                if shot.get('provenance') not in {'annotation', 'visual_review', 'visual_sample_review', 'human_review'}:
+                    continue
+                start, end = shot['safe_start'], shot['safe_end']
+                if not 0 <= start <= shot['core_start'] < shot['core_end'] <= end <= row['duration']:
+                    raise UltraError('Invalid shot boundaries: ' + str(shots))
+                actions.append(Action(str(source), start, (start + end) / 2, end,
+                                      sport=sport, label=shot.get('label', 'action'),
+                                      confidence=shot.get('quality', 1), provenance=shot['provenance']))
+            continue
+        if annotation.exists():
+            actions.extend(from_json(annotation, source, row['duration'], sport))
+    return sum(a.duration for a in validate_no_overlap(actions))
+
+
+def readiness(state, athlete, target, videos, music, style="", mode="personal"):
     local = [r for r in state["media"].values() if r.get("available") and relevant_video(r, athlete)]
     local = list({r["sha256"]: r for r in local}.values())
     audio = [r for r in state["media"].values() if r.get("available") and r["kind"] == "audio"
              and normalize(style).replace("-", " ") in
              normalize(r["path"] + " " + r.get("genre", "")).replace("-", " ")]
     audio = list({r["sha256"]: r for r in audio}.values())
-    available_music = max(0, sum(r["duration"] for r in music) - .7 * max(0, len(music) - 1))
+    available_music = max(0, sum(r.get("usable_duration", r["duration"]) for r in music) - .7 * max(0, len(music) - 1))
     return dict(
         target_seconds=target,
         video=dict(accessible_raw_seconds=sum(r["duration"] for r in local),
@@ -136,90 +168,17 @@ def readiness(state, athlete, target, videos, music, style=""):
                    selected_seconds_after_crossfades=available_music,
                    selected_shortfall_seconds=max(0, target - available_music)),
         technical=dict(video_files_missing=not local, audio_style_files_missing=not audio),
-        permissions=dict(video_files_without_evidence=[r["path"] for r in local if not cat.permitted(state, r)],
-                         audio_files_without_evidence=[r["path"] for r in audio if not cat.permitted(state, r)]),
+        permissions=dict(video_files_without_evidence=[r["path"] for r in local if not cat.permitted(state, r, mode=mode)],
+                         audio_files_without_evidence=[r["path"] for r in audio if not cat.permitted(state, r, mode=mode)]),
         editorial=dict(unique_complete_actions_seconds=None,
                        status="NOT_VERIFIED; raw durations are upper bounds, not usable action coverage"),
     )
 
 
-def verify_output(path, target):
-    info = json.loads(
-        run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_streams",
-                "-show_format",
-                "-of",
-                "json",
-                str(path),
-            ]
-        )
-    )
-    v = next((s for s in info["streams"] if s["codec_type"] == "video"), None)
-    a = next((s for s in info["streams"] if s["codec_type"] == "audio"), None)
-    if not v or not a:
-        raise UltraError("Export sans flux vidéo/audio")
-    duration = float(info["format"]["duration"])
-    if abs(duration - target) > 5:
-        raise UltraError(f"Durée finale {duration}, cible {target}")
-    if v["codec_name"] != "h264":
-        raise UltraError("Export non H.264")
-    delta = abs(float(v.get("start_time", 0)) - float(a.get("start_time", 0)))
-    end_delta = abs(
-        float(v.get("duration", duration)) - float(a.get("duration", duration))
-    )
-    if delta > 0.15 or end_delta > 0.3:
-        raise UltraError("Désalignement temporel des flux audio/vidéo")
-    cp = subprocess.run(
-        [
-            "ffmpeg",
-            "-nostdin",
-            "-hide_banner",
-            "-v",
-            "info",
-            "-xerror",
-            "-i",
-            str(path),
-            "-vf",
-            "blackdetect=d=0.5:pix_th=0.10,freezedetect=n=-50dB:d=2",
-            "-af",
-            "silencedetect=n=-50dB:d=1,ebur128=peak=true",
-            "-f",
-            "null",
-            "-",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    (path.parent / "decode_quality.log").write_text(cp.stderr)
-    if cp.returncode:
-        raise UltraError("Décodage complet en échec ; voir decode_quality.log")
-    flags = [
-        line
-        for line in cp.stderr.splitlines()
-        if any(k in line for k in ["black_start:", "freeze_start:", "silence_start:"])
-    ]
-    peaks = [float(x) for x in re.findall(r"Peak:\s*(-?[0-9.]+) dBFS", cp.stderr)]
-    if not peaks:
-        raise UltraError("Mesure de crête audio absente")
-    if max(peaks) >= 0:
-        raise UltraError("Crête audio >= 0 dBFS ; corriger le mix")
-    return dict(
-        status="TECHNICAL_PASS_REVIEW_REQUIRED",
-        duration=duration,
-        start_offset_seconds=delta,
-        end_duration_delta_seconds=end_delta,
-        full_decode=True,
-        true_peak_dbfs=max(peaks),
-        probe=info,
-        quality_flags=flags,
-        semantic_actions_verified=False,
-        sync_scope="stream timestamps only; musical/action sync requires review",
-        sha256=cat.sha256(path),
-    )
+def verify_output(path, target, **kwargs):
+    # Kept here for existing callers and production scripts.
+    from .quality import verify_output as verify
+    return verify(path, target, **kwargs)
 
 
 def execute(args):
@@ -233,9 +192,10 @@ def execute(args):
         return locked(args, folder)
 
 
-def locked(args, folder):
+def locked(args, folder, *, output=None, prepare_only=False):
 
-    request = parse_prompt(args.prompt)
+    request = getattr(args, 'request', None) or parse_prompt(args.prompt)
+    mode = getattr(args, 'mode', 'personal')
     if request["athlete"] == "Sport highlights":
         raise UltraError(
             "Sportif non reconnu ; préciser un nom supporté ou utiliser ultra create --athlete"
@@ -251,8 +211,8 @@ def locked(args, folder):
         ]
     )
     stamp = time.strftime("%Y%m%d-%H%M%S") + "-" + str(time.time_ns())[-6:]
-    out = Path(args.output_dir).expanduser().resolve() / stamp
-    out.mkdir(parents=True, exist_ok=False)
+    out = Path(output) if output is not None else Path(args.output_dir).expanduser().resolve() / stamp
+    out.mkdir(parents=True, exist_ok=output is not None)
     report = dict(
         status="RUNNING",
         request=request,
@@ -261,8 +221,10 @@ def locked(args, folder):
         warnings=[],
         output=str(out),
         history_scope="recognized local manifests, not exhaustive deleted-project or YouTube history",
+        mode=mode,
     )
     report_path = out / "production_report.json"
+    cat.save(report_path, report)
     try:
         print("Catalogue : recherche et indexation des médias locaux", flush=True)
         cat.scan(roots, state)
@@ -287,12 +249,14 @@ def locked(args, folder):
             r
             for r in state["media"].values()
             if r["kind"] == "video"
-            and cat.permitted(state, r)
+            and cat.permitted(state, r, mode=mode)
             and relevant_video(r, request["athlete"])
         ]
         candidates = legacy_candidates(state, request["athlete"])
         if not args.offline:
             for entry in state.get("authorized_urls", []):
+                if not cat.grant_allows({"reuse": True, **entry}, mode):
+                    continue
                 if entry["kind"] == "video" and normalize(
                     entry.get("athlete", "")
                 ) != normalize(request["athlete"]):
@@ -302,7 +266,7 @@ def locked(args, folder):
                 # A validated local copy must work even when its host is now unavailable.
                 cached = [r for r in state["media"].values()
                           if r.get("url") == entry["url"] and r["kind"] == entry["kind"]
-                          and cat.permitted(state, r)]
+                          and cat.permitted(state, r, mode=mode)]
                 if cached:
                     if entry["kind"] == "video":
                         videos.extend(cached)
@@ -323,21 +287,26 @@ def locked(args, folder):
                     files = downloader([entry["url"]], dest)
                     cat.scan([dest], state)
                     for f in files:
-                        r = state["media"][str(f.resolve())]
+                        r = state['media'].get(str(f.resolve()))
+                        if not r or not r.get('available'):
+                            raise UltraError('Acquired file failed catalogue validation: ' + str(f))
                         r.update(
                             url=entry["url"],
                             title=entry.get("title") or r["title"],
                             artist=entry.get("artist") or r["artist"],
                             genre=entry.get("style", ""),
                         )
-                        state["permissions"][r["sha256"]] = dict(
-                            reuse=True, evidence=entry["evidence"], credit=entry.get("credit")
-                        )
+                        grant = {k: value for k, value in entry.items()
+                                 if k not in {'url', 'kind', 'athlete', 'style', 'title', 'artist'}}
+                        grant.setdefault('reuse', True)
+                        state['permissions'][r['sha256']] = grant
+                        for key in ('release_date', 'language', 'country'):
+                            if entry.get(key): r[key] = entry[key]
                         if entry["kind"] == "video":
                             videos.append(r)
                 except (UltraError, OSError) as e:
                     report["warnings"].append(str(e))
-        if not args.offline and sum(v["duration"] for v in videos) < request["duration_seconds"]:
+        if not args.offline and annotated_coverage(videos, request['sport']) < request["duration_seconds"]:
             try:
                 print("Recherche publique des sources et de leurs licences", flush=True)
                 fresh = discover(request["athlete"], folder / "search",
@@ -348,41 +317,49 @@ def locked(args, folder):
                                           for e in search_report.get("errors", []))
                 candidates = list({c["webpage_url"]: c for c in [*candidates, *fresh]}.values())
                 for c in candidates:
-                    c["permission"] = (
-                        "declared_CC_BY" if cc_by(c) else "UNKNOWN_NO_DOWNLOAD"
-                    )
-                    if not download_permission(c, config):
+                    c['permission'] = 'declared_CC_BY' if cc_by(c) else 'UNKNOWN_NO_DOWNLOAD'
+                    if mode == "commercial" or not download_permission(c, config):
                         c["permission"] = "UNVERIFIED_NO_DOWNLOAD"
                         continue
-                    if not all(
-                        w in normalize(c["title"] or "")
-                        for w in normalize(request["athlete"]).split()
-                    ):
+                    if not athlete_match(c["title"] or "", request["athlete"]):
                         continue
-                    if shutil.disk_usage(folder).free < 2_000_000_000:
-                        raise UltraError("Moins de 2 Go libres avant téléchargement")
-                    destination = (
-                        folder
-                        / "downloads"
-                        / hashlib.sha256(c["webpage_url"].encode()).hexdigest()[:20]
-                    )
-                    files = download_explicit([c["webpage_url"]], destination)
-                    cat.scan([destination], state)
-                    for f in files:
-                        r = state["media"][str(f.resolve())]
-                        r.update(
-                            title=c["title"],
-                            url=c["webpage_url"],
-                            uploader=c["uploader"],
-                            license=c["license"],
+                    cached = [r for r in state['media'].values()
+                              if r.get('url') == c['webpage_url'] and cat.permitted(state, r, mode=mode)]
+                    if cached:
+                        videos.extend(cached)
+                        c['acquisition_status'] = 'CACHED'
+                        continue
+                    try:
+                        if shutil.disk_usage(folder).free < 2_000_000_000:
+                            raise UltraError("Moins de 2 Go libres avant téléchargement")
+                        destination = (
+                            folder
+                            / "downloads"
+                            / hashlib.sha256(c["webpage_url"].encode()).hexdigest()[:20]
                         )
-                        state["permissions"][r["sha256"]] = dict(
-                            reuse=True,
-                            evidence=c,
-                            checked_at=time.time(),
-                            basis="CC_BY_from_user_trusted_publisher",
-                        )
-                        videos.append(r)
+                        files = download_explicit([c["webpage_url"]], destination)
+                        cat.scan([destination], state)
+                        for f in files:
+                            r = state['media'].get(str(f.resolve()))
+                            if not r or not r.get('available'):
+                                raise UltraError('Acquired file failed catalogue validation: ' + str(f))
+                            r.update(
+                                title=c["title"],
+                                url=c["webpage_url"],
+                                uploader=c["uploader"],
+                                license=c["license"],
+                            )
+                            state["permissions"][r["sha256"]] = dict(
+                                reuse=True,
+                                evidence=c,
+                                checked_at=time.time(),
+                                basis="CC_BY_from_user_trusted_publisher",
+                            )
+                            videos.append(r)
+                    except (UltraError, OSError, ValueError) as exc:
+                        c['acquisition_error'] = str(exc)
+                        report['warnings'].append(c['webpage_url'] + ': ' + str(exc))
+                        continue
                 cat.save(folder / "catalogue.json", state)
             except (UltraError, ValueError, OSError) as e:
                 report["warnings"].append(str(e))
@@ -397,7 +374,18 @@ def locked(args, folder):
                 explicit = config.get("playlists", {}).get(request["style"])
                 if not explicit:
                     raise UltraError("Playlist demandée explicitement : fournir son URL avec --playlist")
-            playlist, playlist_url, report["spotify"] = resolve_playlist(folder, config, request["style"], explicit)
+            if args.offline:
+                if explicit:
+                    cached = cat.read(folder / 'playlists' / (slug(request['style']) + '.json'), {})
+                    if not cached or cached.get('url') != explicit:
+                        raise UltraError('Offline: requested Spotify playlist has no matching complete cache')
+                    playlist, playlist_url = cached, explicit
+                    report['spotify'] = dict(mode='offline_cache', membership_verified=True,
+                                             snapshot_scope='Previously fetched; current remote membership not checked')
+                else:
+                    report['spotify'] = dict(mode='offline_local', membership_verified=False)
+            else:
+                playlist, playlist_url, report['spotify'] = resolve_playlist(folder, config, request['style'], explicit)
             if playlist is not None:
                 cat.save(out / "spotify_playlist.json", playlist)
             if report["spotify"]["mode"] == "local_fallback":
@@ -405,8 +393,22 @@ def locked(args, folder):
         except UltraError as e:
             report["blockers"].append(str(e))
             report["spotify"] = dict(mode="required_unavailable", membership_verified=False, error=str(e))
-        music, excluded = cat.select_music(state, request["style"], playlist)
-        ready = readiness(state, request["athlete"], request["duration_seconds"], videos, music, request["style"])
+        music, excluded = cat.select_music(state, request["style"], playlist, mode=mode)
+        from .music import audio_profile
+        for row in music:
+            row["usable_duration"] = audio_profile(Path(row["path"]), cache_dir=out / 'cache/audio-profiles')["usable_duration"]
+            state['media'][row['path']]['usable_duration'] = row['usable_duration']
+        if (not args.offline and playlist is None and not report["blockers"]
+                and sum(r.get("usable_duration", r["duration"]) for r in music) - .7 * max(0, len(music) - 1)
+                < request["duration_seconds"] + 1):
+            from .music_sources import acquire
+            print("Recherche et acquisition musicale auprès des catalogues sous licence", flush=True)
+            acquisition = acquire(request['style'], request['duration_seconds'], state, folder,
+                                  **({'mode': mode} if mode != 'personal' else {}))
+            cat.save(out / "music_acquisition_report.json", acquisition)
+            report["warnings"].extend(acquisition["errors"])
+            music, excluded = cat.select_music(state, request["style"], playlist, mode=mode)
+        ready = readiness(state, request["athlete"], request["duration_seconds"], videos, music, request["style"], mode=mode)
         cat.save(out / "readiness_report.json", ready)
         cat.save(
             out / "excluded_tracks.json",
@@ -431,6 +433,11 @@ def locked(args, folder):
         cat.save(out / "source_candidates.json", dict(videos=videos, music=music))
         if report["blockers"]:
             raise UltraError("; ".join(report["blockers"]))
+        if prepare_only and playlist is None:
+            from .music import arrange_playlist
+            music, progression = arrange_playlist(music, cache_dir=out / 'cache/audio-profiles')
+            cat.save(out / 'playlist_progression.json', progression)
+            cat.save(out / 'source_candidates.json', dict(videos=videos, music=music))
         sources = []
         for video in videos:
             p = Path(video["path"])
@@ -442,6 +449,7 @@ def locked(args, folder):
                 )
             )
         manifest = dict(
+            editorial=True,
             athlete=request["athlete"],
             sport=request["sport"],
             style=request["style"],
@@ -450,10 +458,13 @@ def locked(args, folder):
             sources_only=True,
             music=[r["path"] for r in music],
             library=str(folder / "library"),
-            cache_dir=str(folder / "cache"),
+            cache_dir=str(out / "cache"),
             output_dir=str(out),
         )
-        cat.save(out / "project.json", manifest)
+        cat.save(out / 'project.json', manifest)
+        if prepare_only:
+            report.update(status='PREPARED', manifest=str(out / 'project.json'))
+            return 0
         argv = [
             "create",
             args.prompt,
@@ -490,11 +501,14 @@ def locked(args, folder):
         rendered = (
             out / f"{slug(request['athlete'])}-{round(request['duration_seconds'])}s"
         )
-        qa = verify_output(rendered / "montage.mp4", request["duration_seconds"])
+        from .quality import finalize_output
+        qa = finalize_output(rendered / 'montage.mp4', request['duration_seconds'], job_dir=out,
+                             width=args.width, height=args.height, fps=args.fps)
         integrity = cat.read(rendered / "action_integrity_report.json")
         if not integrity["all_selected_event_windows_preserved"]:
             raise UltraError("Action tronquée dans la timeline")
-        qa["exact_action_windows_preserved"] = True
+        qa["protected_action_cores_preserved"] = True
+        qa["exact_action_windows_preserved"] = not manifest.get("editorial", False)
         qa["visual_duplicate_review"] = (
             "NOT_VERIFIED (only byte-identical source deduplication)"
         )
@@ -518,7 +532,10 @@ def locked(args, folder):
             r["permission"] = state["permissions"][r["sha256"]]
             r["order"] = i + 1
             r["timeline_start"] = offset
-            r["used_seconds"] = min(r["duration"], request["duration_seconds"] - offset)
+            profile = audio_profile(Path(r["path"]))
+            r["source_start"] = profile["source_start"]
+            r["used_seconds"] = min(profile["usable_duration"], request["duration_seconds"] - offset)
+            r["source_end"] = r["source_start"] + r["used_seconds"]
             r["timeline_end"] = offset + r["used_seconds"]
             offset += r["used_seconds"] - 0.7
             state["used"].append(
@@ -527,7 +544,7 @@ def locked(args, folder):
                     artist=r["artist"],
                     family=cat.family(r["title"]),
                     sha256=r["sha256"],
-                    evidence=str(rendered / "montage.mp4"),
+                    evidence=qa["output"],
                 )
             )
         cat.save(
@@ -558,7 +575,7 @@ def locked(args, folder):
             rendered=str(rendered),
             quality_flags=qa["quality_flags"],
         )
-        print("Export local : " + str(rendered / "montage.mp4"), flush=True)
+        print("Export local : " + qa["output"], flush=True)
         return 0
     except (UltraError, ValueError, OSError) as e:
         report["status"] = "BLOCKED"
@@ -613,6 +630,8 @@ def catalogue_command(args):
                 title=args.title,
                 artist=args.artist,
             )
+            row.update(_permission_from_args(args))
+            row.update({k: getattr(args, k) for k in ('release_date', 'language', 'country') if getattr(args, k, None)})
             state.setdefault("authorized_urls", [])[:] = [
                 r for r in state.get("authorized_urls", []) if r["url"] != args.url
             ] + [row]
@@ -621,14 +640,42 @@ def catalogue_command(args):
             if not args.evidence.strip():
                 raise UltraError("Justificatif de permission requis")
             digest = cat.sha256(p)
-            state["permissions"][digest] = dict(
-                reuse=True, evidence=args.evidence, checked_at=time.time()
-            )
+            cat.scan([p.parent], state)
+            row = state['media'].get(str(p))
+            if not row or not row.get('available') or row['sha256'] != digest:
+                raise UltraError('File could not be indexed safely: ' + str(p))
+            for arg, key in [('title', 'title'), ('artist', 'artist'), ('style', 'genre'),
+                             ('release_date', 'release_date'), ('language', 'language'), ('country', 'country')]:
+                if getattr(args, arg, None):row[key] = getattr(args, arg)
+            if getattr(args, 'athlete', None):
+                row['title'] = args.athlete + ' ' + row.get('title', '')
+            state['permissions'][digest] = _permission_from_args(args, state['permissions'].get(digest))
         cat.save(folder / "catalogue.json", state)
         print(
             f"Catalogue : {len(state['media'])} médias ; {len(state['used'])} occurrences historiques ; {len(state['errors'])} erreurs"
         )
     return 0
+
+
+def _permission_from_args(args, previous=None):
+    data = cat.read(Path(args.rights_json).expanduser()) if getattr(args, 'rights_json', None) else {}
+    if not isinstance(data, dict):
+        raise UltraError('Rights JSON must be an object')
+    mode = getattr(args, 'mode', None) or data.pop('scope', 'personal')
+    for key in ('scope', 'mode', 'evidence', 'reuse', 'previous'):
+        data.pop(key, None)
+    return cat.permission_grant(args.evidence, mode=mode, previous=previous, **data)
+
+
+def _permission_options(parser, *, local=False):
+    parser.add_argument('--mode', choices=['personal', 'commercial'])
+    parser.add_argument('--rights-json', help='Preuve et portée commerciale explicites en JSON')
+    parser.add_argument('--release-date')
+    parser.add_argument('--language')
+    parser.add_argument('--country')
+    if local:
+        for name in ('athlete', 'style', 'title', 'artist'):
+            parser.add_argument('--' + name)
 
 
 def spotify_command(args):
@@ -664,6 +711,7 @@ def add_commands(sub):
     p.add_argument("--output-dir", default="output/productions")
     p.add_argument("--playlist")
     p.add_argument("--offline", action="store_true")
+    p.add_argument('--mode', choices=['personal', 'commercial'], default='personal')
     p.add_argument("--strict-actions", action="store_true")
     p.add_argument("--semantic-model")
     p.add_argument("--width", type=int, default=1920)
@@ -681,6 +729,7 @@ def add_commands(sub):
     s = actions.add_parser("authorize")
     s.add_argument("path")
     s.add_argument("--evidence", required=True)
+    _permission_options(s, local=True)
     s.set_defaults(func=catalogue_command)
     s = actions.add_parser("authorize-url")
     s.add_argument("url")
@@ -690,6 +739,7 @@ def add_commands(sub):
     s.add_argument("--style")
     s.add_argument("--title")
     s.add_argument("--artist")
+    _permission_options(s)
     s.set_defaults(func=catalogue_command)
     p = sub.add_parser(
         "spotify",

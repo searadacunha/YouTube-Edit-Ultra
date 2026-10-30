@@ -1,5 +1,4 @@
 import shutil
-from pathlib import Path
 
 import pytest
 
@@ -29,6 +28,7 @@ def test_render_preserves_full_action_with_music(tmp_path):
     assert info['has_audio'] and info['has_video']
     assert info['duration'] == pytest.approx(6, abs=.45)
     assert result['resolution'] == '320x180'
+    assert not (tmp_path / 'cache/assembled-video.mp4').exists()
 
     # Centre-anchored text must stay centred and inside a small thumbnail.
     import numpy as np

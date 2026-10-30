@@ -97,6 +97,8 @@ def test_direct_original_download_reuses_validated_cache(tmp_path, monkeypatch):
             from pathlib import Path
             Path(argv[argv.index('--output') + 1]).write_bytes(b'fixture')
             return ''
+        if argv[0] == 'ffmpeg':
+            return 'out_time_us=20000000\nprogress=end\n'
         return json.dumps({'streams': [{'codec_type': 'audio'}], 'format': {'duration': '20'}})
     monkeypatch.setattr(media, 'run', run)
     monkeypatch.setattr(media.shutil, 'which', lambda _: 'curl')

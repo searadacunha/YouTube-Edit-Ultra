@@ -8,13 +8,31 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import subprocess
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from .events import Action
-from .media import UltraError, fingerprint
+from .catalogue import save, sha256
+from .media import UltraError
+
+
+def _validate_response(info: dict) -> dict:
+    if not isinstance(info, dict):
+        raise UltraError("Réponse du modèle visuel invalide : objet JSON attendu")
+    intensity = info.get("intensity")
+    if (type(intensity) not in (int, float) or not math.isfinite(intensity) or
+            not 0 <= intensity <= 1):
+        raise UltraError("Réponse du modèle visuel invalide : intensity doit être un nombre fini entre 0 et 1")
+    for field in ("sports_action_visible", "is_crowd_or_graphics_only",
+                  "complete_action_visible_in_these_frames"):
+        if type(info.get(field)) is not bool:
+            raise UltraError(f"Réponse du modèle visuel invalide : {field} doit être booléen")
+    if not isinstance(info.get("event_label"), str) or not info["event_label"].strip():
+        raise UltraError("Réponse du modèle visuel invalide : event_label doit être du texte")
+    return info
 
 
 def _frame_base64(source: str, at: float) -> str:
@@ -50,42 +68,67 @@ def _ask_ollama(images: list[str], sport: str, model: str) -> dict:
     except (URLError, TimeoutError) as exc:
         raise UltraError("Ollama indisponible (serveur local 127.0.0.1:11434). Installer Ollama, "
                          f"exécuter 'ollama pull {model}', puis relancer.") from exc
+    except (ValueError, TypeError) as exc:
+        raise UltraError("Enveloppe JSON du modèle visuel invalide") from exc
     try:
+        if not isinstance(raw, dict):
+            raise ValueError("objet JSON attendu")
         response = json.loads(raw.get("response", "{}"))
     except (ValueError, TypeError) as exc:
         raise UltraError("Réponse JSON du modèle visuel invalide") from exc
-    return response
+    return _validate_response(response)
 
 
 def enrich(actions: list[Action], *, sport: str, model: str, cache_dir: Path,
            limit: int = 150) -> tuple[list[Action], list[dict]]:
     cache_dir.mkdir(parents=True, exist_ok=True)
     result, logs = [], []
+    sources = {}
     count = 0
     for action in actions:
         if action.provenance not in {"heuristic", "heuristic_vlm"} or (limit > 0 and count >= limit):
             result.append(action)
             continue
         count += 1
-        key = hashlib.sha256(f"{fingerprint(Path(action.source))}:{action.start}:{action.peak}:{action.end}:{model}".encode()).hexdigest()[:24]
+        source = Path(action.source).resolve()
+        stat = source.stat()
+        signature = (stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        if str(source) not in sources:
+            sources[str(source)] = (signature, sha256(source))
+        original, digest = sources[str(source)]
+        if original != signature:
+            raise UltraError(f"Source modifiée pendant l'analyse visuelle : {source}")
+        binding = {"version": 2, "source": str(source), "sha256": digest,
+                   "start": action.start, "peak": action.peak, "end": action.end,
+                   "sport": sport, "model": model, "frame_width": 384}
+        key = hashlib.sha256(json.dumps(binding, sort_keys=True).encode()).hexdigest()
         cache = cache_dir / f"vlm-{key}.json"
         if cache.is_file():
-            info = json.loads(cache.read_text())
+            try:
+                payload = json.loads(cache.read_text())
+                if not isinstance(payload, dict) or payload.get("binding") != binding:
+                    raise ValueError("source ou paramètres différents")
+                info = _validate_response(payload["response"])
+            except (OSError, ValueError, TypeError, KeyError, UltraError) as exc:
+                raise UltraError(f"Cache du modèle visuel invalide : {cache}: {exc}") from exc
         else:
             times = [action.start + min(2.0, action.duration * .16), action.peak,
                      action.end - min(2.0, action.duration * .16)]
             images = [_frame_base64(action.source, t) for t in times]
-            info = _ask_ollama(images, sport, model)
-            cache.write_text(json.dumps(info, indent=2), encoding="utf-8")
-        raw_intensity = info.get("intensity", 0.0)
-        try:
-            intensity = min(1.0, max(0.0, float(raw_intensity)))
-        except (ValueError, TypeError):
-            intensity = 0.0
-        visible = info.get("sports_action_visible", False) is True
-        graphics = info.get("is_crowd_or_graphics_only", False) is True
+            try:
+                info = _validate_response(_ask_ollama(images, sport, model))
+            except UltraError as exc:
+                raise UltraError(f"{exc} — {source} à {action.peak:.3f}s") from exc
+        after = source.stat()
+        if (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != original:
+            raise UltraError(f"Source modifiée pendant l'analyse visuelle : {source}")
+        if not cache.is_file():
+            save(cache, {"binding": binding, "response": info})
+        intensity = info["intensity"]
+        visible = info["sports_action_visible"]
+        graphics = info["is_crowd_or_graphics_only"]
         confidence = max(0.08, min(0.80, (0.35 + intensity * 0.4) if visible and not graphics else 0.1))
-        label = str(info.get("event_label") or action.label)[:80]
+        label = info["event_label"][:80]
         result.append(Action(action.source, action.start, action.peak, action.end,
                              action.sport, label, confidence, "heuristic_vlm"))
         logs.append({"source": action.source, "peak": action.peak,

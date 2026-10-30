@@ -4,9 +4,55 @@ from __future__ import annotations
 import math
 import json
 import subprocess
+import hashlib
+import re
 from pathlib import Path
 
 from .media import UltraError, probe, run
+
+
+def audio_profile(path: Path, *, cache_dir: Path | None = None) -> dict:
+    """Cache measured gain and audible bounds; container duration can include long silence."""
+    from .catalogue import read, save, sha256
+    key = hashlib.sha256((sha256(path) + ':audible-v2').encode()).hexdigest()
+    root = Path(cache_dir) if cache_dir is not None else Path.home() / '.local/share/youtube-edit-ultra/cache/audio-profiles'
+    cache = root / (key + '.json')
+    if cache.exists():
+        try:
+            result = read(cache)
+            required = ['integrated_lufs', 'true_peak_dbtp', 'gain_db', 'source_start', 'source_end', 'usable_duration']
+            if (not all(math.isfinite(result[k]) for k in required)
+                    or result['source_start'] < 0 or result['usable_duration'] <= 1.2
+                    or abs(result['source_end'] - result['source_start'] - result['usable_duration']) > 1e-6):
+                raise ValueError('invalid measurements')
+            return dict(result, path=str(path))
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            raise UltraError(f'Invalid audio profile cache {cache}: {exc}') from exc
+    level = measure_loudness(path)
+    duration = probe(path)['duration']
+    cp = subprocess.run(['ffmpeg', '-nostdin', '-hide_banner', '-i', str(path), '-vn',
+                         '-af', f"volume={level['gain_db']}dB,silencedetect=n=-45dB:d=0.15",
+                         '-f', 'null', '-'], capture_output=True, text=True)
+    if cp.returncode:
+        raise UltraError('Analyse des silences échouée : ' + cp.stderr[-800:])
+    start, end, pending = 0.0, duration, None
+    for kind, value in re.findall(r'silence_(start|end):\s*([0-9.]+)', cp.stderr):
+        value = float(value)
+        if kind == 'start':
+            pending = value
+        elif pending is not None:
+            if pending < .05:
+                start = max(0, value - .03)
+            if value >= duration - .1:
+                end = min(duration, pending + .03)
+            pending = None
+    if pending is not None:
+        end = min(end, pending + .03)
+    if end - start <= 1.2:
+        raise UltraError(f'Piste sans durée audible suffisante : {path}')
+    result = dict(level, source_start=start, source_end=end, usable_duration=end-start)
+    save(cache, result)
+    return result
 
 
 def measure_loudness(path: Path) -> dict:
@@ -29,14 +75,14 @@ def measure_loudness(path: Path) -> dict:
 
 
 def soundtrack_playlist(paths: list[Path], required: float, *, allow_repeat: bool = False,
-                        fade: float = 0.7) -> list[Path]:
+                        fade: float = 0.7, cache_dir: Path | None = None) -> list[Path]:
     if not paths:
         raise UltraError("Aucune musique : ajouter des pistes dans library/music/<style>/ ou --music")
     durations: dict[Path, float] = {}
     for path in paths:
         if not path.is_file():
             raise UltraError(f"Fichier musical introuvable : {path}")
-        duration = probe(path)["duration"]
+        duration = audio_profile(path, cache_dir=cache_dir)["usable_duration"]
         if duration <= fade + 0.5:
             raise UltraError(f"Piste trop courte : {path.name}")
         durations[path] = duration
@@ -54,16 +100,47 @@ def soundtrack_playlist(paths: list[Path], required: float, *, allow_repeat: boo
     return chosen
 
 
+def arrange_playlist(rows: list[dict], *, cache_dir: Path) -> tuple[list[dict], dict]:
+    """Build a gradual percussive progression; explicit playlists keep their order elsewhere."""
+    from .catalogue import read, save, sha256
+    measured = []
+    for row in rows:
+        path = Path(row['path'])
+        digest = sha256(path)
+        cache = cache_dir / (digest + '-rhythm-v1.json')
+        if cache.exists():
+            rhythm = read(cache)
+            if (not isinstance(rhythm, dict) or rhythm.get('sha256') != digest
+                    or not all(isinstance(rhythm.get(k), (int, float)) and math.isfinite(rhythm[k])
+                               and rhythm[k] >= 0 for k in ('onsets_per_second', 'estimated_bpm'))):
+                raise UltraError('Invalid playlist rhythm cache: ' + str(cache))
+        else:
+            import statistics
+            beats = extract_beats(path)
+            gaps = [b - a for a, b in zip(beats, beats[1:]) if .27 <= b - a <= 1.5]
+            duration = audio_profile(path, cache_dir=cache_dir)['usable_duration']
+            rhythm = dict(sha256=digest, onsets_per_second=len(beats) / duration,
+                          estimated_bpm=60 / statistics.median(gaps) if gaps else 0.)
+            save(cache, rhythm)
+        measured.append(dict(path=str(path), **rhythm))
+    metrics = {m['path']: m for m in measured}
+    ordered = sorted(rows, key=lambda r: (metrics[r['path']]['onsets_per_second'],
+                                         metrics[r['path']]['estimated_bpm']))
+    return ordered, dict(method='gradually increasing measured onset density',
+                         tempo_is_estimate=True, harmonic_compatibility_verified=False,
+                         tracks=[metrics[r['path']] for r in ordered])
+
+
 def build_soundtrack(paths: list[Path], target: float, out: Path, *, repeat: bool = False,
-                     fade: float = 0.7) -> list[Path]:
+                     fade: float = 0.7, cache_dir: Path | None = None) -> list[Path]:
     """Crossfade tracks, then trim to precisely the requested duration."""
     out.parent.mkdir(parents=True, exist_ok=True)
-    chosen = soundtrack_playlist(paths, target, allow_repeat=repeat, fade=fade)
-    levels = [measure_loudness(path) for path in chosen]
+    chosen = soundtrack_playlist(paths, target, allow_repeat=repeat, fade=fade, cache_dir=cache_dir)
+    levels = [audio_profile(path, cache_dir=cache_dir) for path in chosen]
     out.with_suffix(".levels.json").write_text(json.dumps(levels, indent=2) + "\n")
     filters = []
     for i in range(len(chosen)):
-        filters.append(f"[{i}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume={levels[i]['gain_db']}dB,asetpts=PTS-STARTPTS[a{i}]")
+        filters.append(f"[{i}:a:0]atrim=start={levels[i]['source_start']}:end={levels[i]['source_end']},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume={levels[i]['gain_db']}dB,asetpts=PTS-STARTPTS[a{i}]")
     left = "a0"
     for i in range(1, len(chosen)):
         new = f"mix{i}"

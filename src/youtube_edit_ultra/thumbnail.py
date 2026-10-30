@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .media import UltraError
 from .planner import Edit
 
 
@@ -57,6 +58,8 @@ def create_storyboard(edits: list[Edit], out: Path, *, columns: int = 3,
     import subprocess
     if not edits:
         raise ValueError("Timeline vide")
+    if any(type(x) is not int or x <= 0 for x in (columns, rows)):
+        raise ValueError("Dimensions du storyboard invalides")
     selected = [e for e in edits if e.source_peak is not None]
     if not selected:
         selected = edits
@@ -68,15 +71,21 @@ def create_storyboard(edits: list[Edit], out: Path, *, columns: int = 3,
     font = ImageFont.load_default()
     for n, i in enumerate(indices):
         edit = selected[i]
-        at = edit.source_peak or (edit.source_start + edit.source_end) / 2
+        at = edit.source_peak if edit.source_peak is not None else (edit.source_start + edit.source_end) / 2
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", f"{at:.3f}",
                "-i", edit.source, "-frames:v", "1", "-vf",
                "scale=320:180:force_original_aspect_ratio=increase,crop=320:180",
                "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
-        proc = subprocess.run(cmd, capture_output=True, check=False)
-        if proc.returncode or not proc.stdout:
-            continue
-        image = Image.open(io.BytesIO(proc.stdout)).convert("RGB")
+        try:
+            proc = subprocess.run(cmd, capture_output=True, check=False)
+            if proc.returncode or not proc.stdout:
+                detail = proc.stderr.decode("utf-8", errors="replace")[-500:]
+                raise ValueError(detail or "aucune image décodée")
+            with Image.open(io.BytesIO(proc.stdout)) as frame:
+                image = frame.convert("RGB")
+        except (OSError, ValueError) as exc:
+            raise UltraError(f"Storyboard impossible : plan {i + 1}, {edit.source} "
+                             f"à {at:.3f}s : {exc}") from exc
         x, y = (n % columns) * cellw, (n // columns) * cellh
         canvas.paste(image, (x, y))
         description = (f"{edit.timeline_start:.0f}s  " + edit.label.replace("_", " "))[:47]

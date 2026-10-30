@@ -2,9 +2,11 @@
 
 import hashlib
 import json
+import math
 import os
 import re
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from .media import AUDIO_EXT, VIDEO_EXT, UltraError, run
@@ -60,6 +62,27 @@ def sha256(path):
         return hashlib.file_digest(f, "sha256").hexdigest()
 
 
+def current_content(row):
+    """A cached grant cannot survive a missing or replaced local file."""
+    try:
+        path = Path(row["path"])
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Media missing or symlinked")
+        stat = path.stat()
+        signature = [stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
+        if row.get("stat") != signature:
+            if sha256(path) != row.get("sha256"):
+                raise ValueError("Media content changed; scan and permission review required")
+            after = path.stat()
+            if signature != [after.st_size, after.st_mtime_ns, after.st_ctime_ns]:
+                raise ValueError("Media changed while checking its hash")
+            row["stat"] = signature
+        return True
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        row.update(available=False, availability_error=str(exc))
+        return False
+
+
 def family(title):
     title = re.sub(r"\([^)]*\)|\[[^]]*\]", "", title)
     title = re.split(
@@ -101,7 +124,8 @@ def scan(roots, state):
             state["unconfirmed_history"].append(row)
             state["used"].remove(row)
     for entry in state["media"].values():
-        entry["available"] = Path(entry["path"]).is_file()
+        # Check entries outside this scan's roots too; existence alone is not a grant.
+        entry["available"] = bool(entry.get("available") and current_content(entry))
     seen = set()
     for root in roots:
         root = Path(root).expanduser().resolve()
@@ -227,8 +251,9 @@ def scan(roots, state):
                     st = path.stat()
                     cached = state["media"].get(str(path), {})
                     signature = [st.st_size, st.st_mtime_ns, st.st_ctime_ns]
-                    if cached.get("stat") == signature:
+                    if cached.get("stat") == signature and cached.get("available"):
                         continue
+                    cached["available"] = False
                     info = json.loads(
                         run(
                             [
@@ -244,6 +269,10 @@ def scan(roots, state):
                         )
                     )
                     streams = info.get("streams", [])
+                    duration = float(info.get("format", {}).get("duration", 0))
+                    if (not math.isfinite(duration) or duration <= 0
+                            or not any(s.get("codec_type") in {"audio", "video"} for s in streams)):
+                        raise UltraError("Source has no finite positive media duration")
                     video = next(
                         (
                             s
@@ -266,16 +295,22 @@ def scan(roots, state):
                     )
                     sidecar = path.with_suffix(".info.json")
                     origin = read(sidecar, {})
+                    if not isinstance(origin, dict):
+                        raise ValueError("Source metadata must be an object")
+                    digest = sha256(path)
+                    after = path.stat()
+                    if signature != [after.st_size, after.st_mtime_ns, after.st_ctime_ns]:
+                        raise UltraError("Source changed during inventory")
                     state["media"][str(path)] = dict(
                         path=str(path),
                         stat=signature,
-                        sha256=sha256(path),
+                        sha256=digest,
                         available=True,
                         kind="video" if video else "audio",
                         title=origin.get("title") or title,
                         artist=artist,
                         genre=tags.get("genre", ""),
-                        duration=float(info.get("format", {}).get("duration", 0)),
+                        duration=duration,
                         width=(video or {}).get("width"),
                         height=(video or {}).get("height"),
                         fps=(video or {}).get("r_frame_rate"),
@@ -287,10 +322,17 @@ def scan(roots, state):
                         else "local tags/path",
                     )
                     state["media"][str(path)].update(
-                        release_date=tags.get("date"),
+                        release_date=tags.get("date") or origin.get("release_date"),
                         isrc=tags.get("isrc"),
                         spotify_uri=tags.get("spotify_uri"),
                     )
+                    if cached.get("sha256") == digest:
+                        # A timestamp-only refresh must not discard verified catalogue metadata.
+                        for key in ("title", "artist", "genre", "release_date", "url", "uploader",
+                                    "license", "provenance", "isrc", "spotify_uri", "identity_evidence",
+                                    "usable_duration", "language", "country"):
+                            if cached.get(key) is not None:
+                                state["media"][str(path)][key] = cached[key]
                 except (OSError, ValueError, KeyError, TypeError, UltraError) as e:
                     state["errors"].append({"path": str(path), "error": str(e)})
     for row in state["used"]:
@@ -324,16 +366,77 @@ def import_sources(path, state):
             row["evidence"].append(str(path))
 
 
-def permitted(state, row):
-    permission = state["permissions"].get(row["sha256"], {})
-    return (
-        row.get("available")
-        and permission.get("reuse") is True
-        and bool(permission.get("evidence"))
+def grant_allows(permission, mode="personal"):
+    """Check recorded scope, without treating a public URL as a commercial licence."""
+    if mode not in {"personal", "commercial"}:
+        raise ValueError(f"Unknown rights mode: {mode}")
+    if (not isinstance(permission, dict) or permission.get("reuse") is not True
+            or not permission.get("evidence")):
+        return False
+    if mode == "personal":
+        return permission.get("scope", "personal") in {"personal", "commercial"}
+    try:
+        verified_at = permission.get("rights_verified_at")
+        if isinstance(verified_at, str):
+            datetime.fromisoformat(verified_at.replace("Z", "+00:00"))
+        elif type(verified_at) not in {int, float} or not math.isfinite(verified_at) or verified_at <= 0:
+            return False
+    except (TypeError, ValueError, OverflowError):
+        return False
+    text = lambda key: isinstance(permission.get(key), str) and bool(permission[key].strip())
+    return bool(
+        permission.get("scope") == "commercial"
+        and all(permission.get(key) is True for key in
+                ("commercial_use", "adaptation", "distribution", "monetization"))
+        and all(text(key) for key in ("license", "rights_verified_by"))
+        and (permission.get("attribution_required") is False or text("credit"))
     )
 
 
-def select_music(state, style, playlist):
+def permission_grant(evidence, *, mode="personal", credit=None, license=None,
+                     rights_verified_by=None, rights_verified_at=None,
+                     commercial_use=False, adaptation=False, distribution=False,
+                     monetization=False, attribution_required=True, previous=None, **metadata):
+    """Create an explicit grant, preserving a stronger existing grant for the same bytes."""
+    if mode not in {"personal", "commercial"}:
+        raise ValueError(f"Unknown rights mode: {mode}")
+    if not evidence:
+        raise UltraError("Permission evidence is required")
+    if mode == "personal" and grant_allows(previous, "commercial"):
+        return dict(previous)
+    grant = dict(previous or {})
+    grant.update(metadata, reuse=True, evidence=evidence, scope=mode)
+    if credit is not None:
+        grant["credit"] = credit
+    if mode == "commercial":
+        grant.update(license=license, rights_verified_by=rights_verified_by,
+                     rights_verified_at=rights_verified_at, commercial_use=commercial_use,
+                     adaptation=adaptation, distribution=distribution, monetization=monetization,
+                     attribution_required=attribution_required)
+        if not grant_allows(grant, mode):
+            raise UltraError("Commercial permission requires explicit adaptation, distribution and "
+                             "monetization rights, licence evidence, reviewer/date and required credit")
+    return grant
+
+
+def permitted(state, row, mode="personal"):
+    permission = state["permissions"].get(row.get("sha256"), {})
+    return bool(grant_allows(permission, mode) and row.get("available") is True and current_content(row))
+
+
+def music_style_matches(row, style):
+    text = normalize(row['path'] + ' ' + row.get('genre', '')).replace('-', ' ')
+    if normalize(style).replace('-', ' ') in text:
+        return True
+    if style == 'japanese-hip-hop':
+        japanese = row.get('language', '').lower() in {'ja', 'jpn', 'japanese'} or row.get('country', '').upper() == 'JP'
+        return japanese and any(word in text for word in ('hip hop', 'hiphop', 'rap'))
+    if style == 'rnb-2000s':
+        return any(word in text for word in ('r&b', 'rnb', 'rhythm and blues'))
+    return False
+
+
+def select_music(state, style, playlist, mode="personal"):
     used = {r["family"] for r in state["used"]}
     hashes = {r.get("sha256") for r in state["used"] if r.get("sha256")}
     uncertain = {r["family"] for r in state.get("unconfirmed_history", [])}
@@ -361,8 +464,8 @@ def select_music(state, style, playlist):
                 )
             )
             continue
-        if not permitted(state, row):
-            excluded.append(dict(path=row["path"], reason="reuse_permission_missing"))
+        if not permitted(state, row, mode=mode):
+            excluded.append(dict(path=row["path"], reason=f"{mode}_permission_missing_or_content_changed"))
             continue
         match = None
         if tracks is not None:
@@ -395,9 +498,7 @@ def select_music(state, style, playlist):
                 )
                 continue
             match = matches[0]
-        elif normalize(style).replace("-", " ") not in normalize(
-            row["path"] + " " + row.get("genre", "")
-        ).replace("-", " "):
+        elif not music_style_matches(row, style):
             continue
         if style == "rnb-2000s":
             date = (
@@ -416,4 +517,6 @@ def select_music(state, style, playlist):
         chosen.append(dict(row, spotify=match))
         seen.add(key)
         selected_hashes.add(row["sha256"])
+    if tracks is not None:
+        chosen.sort(key=lambda row: tracks.index(row['spotify']))
     return chosen, excluded

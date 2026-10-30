@@ -12,8 +12,8 @@ from .banner import print_banner, should_show_banner
 from .events import from_json, find_annotation, validate_no_overlap
 from .media import UltraError, audio_library, check_binaries, download_explicit, download_audio_explicit, fingerprint, probe, slug, video_library
 from .music import build_soundtrack, extract_beats, soundtrack_playlist
-from .planner import integrity_report, plan_edit
-from .render import render_edits
+from .planner import Edit, integrity_report, plan_edit
+from .render import render_edits, render_streamed
 from .semantic import enrich
 from .spec import Settings, detect_sport, load_manifest, parse_duration, parse_prompt
 from .thumbnail import create_thumbnail, create_storyboard
@@ -48,6 +48,8 @@ def _build_settings(args: argparse.Namespace, manifest: dict, base: Path) -> Set
                     allow_music_repeat=args.repeat_music, publish=args.publish,
                     width=args.width, height=args.height, fps=args.fps,
                     scene_detect=args.scene_detect, created_from=args.prompt or "",
+                    source_volume=float(manifest.get('source_volume', .22)),
+                    music_volume=float(manifest.get('music_volume', .86)),
                     title=args.title or manifest.get("title"))
 
 
@@ -133,10 +135,18 @@ def create(args: argparse.Namespace) -> int:
     check_binaries()
     settings.output.mkdir(parents=True, exist_ok=True)
     cache_dir = _path(manifest["cache_dir"], base) if manifest.get("cache_dir") else settings.output / "cache"
+    profile_cache = cache_dir / 'audio-profiles'
     videos, forced_annotations = _collect_videos(args, manifest, settings, base)
     music = _collect_music(args, manifest, settings, base)
     # Preflight duration before spending time scanning sources.
-    soundtrack_playlist(music, settings.duration_seconds, allow_repeat=settings.allow_music_repeat)
+    prepared = _path(manifest['prepared_soundtrack'], base) if manifest.get('prepared_soundtrack') else None
+    if prepared:
+        prepared_info = probe(prepared)
+        if not prepared_info['has_audio'] or prepared_info['duration'] < settings.duration_seconds-.05:
+            raise UltraError('Bande-son préparée absente ou trop courte')
+    else:
+        soundtrack_playlist(music, settings.duration_seconds, allow_repeat=settings.allow_music_repeat,
+                            cache_dir=profile_cache)
     print(f"YouTube-Edit-Ultra | {settings.athlete} | {settings.sport} | {settings.style} | {settings.duration_seconds/60:.2f} min")
     print(f"Sources : {len(videos)} vidéos, {len(music)} pistes")
     actions, source_durations, analysis_meta = [], {}, []
@@ -152,6 +162,8 @@ def create(args: argparse.Namespace) -> int:
             analysis_meta.append({"source": str(video), "annotation": str(annotation),
                                   "events": len(parsed), "semantic_source": "external_annotations"})
             print(f"Annotations: {video.name}, {len(parsed)} actions")
+        elif manifest.get('editorial') and (manifest.get('editorial_shots') or video.with_suffix('.shots.json').is_file()):
+            analysis_meta.append({'source': str(video), 'semantic_source': 'editorial_shots_checked_by_planner'})
         elif args.strict_actions:
             raise UltraError(f"--strict-actions : annotations absentes pour {video.name}")
         else:
@@ -169,32 +181,87 @@ def create(args: argparse.Namespace) -> int:
         # A beat grid at 100 BPM exercises the planner without rendering music.
         beats = [i * .6 for i in range(int(settings.duration_seconds / .6) + 2)]
         soundtrack = None
+    elif prepared:
+        soundtrack = prepared
+        beats = extract_beats(soundtrack, engine=args.beat_engine)
     else:
         soundtrack = cache_dir / "soundtrack.m4a"
         chosen = build_soundtrack(music, settings.duration_seconds, soundtrack,
-                                  repeat=settings.allow_music_repeat)
+                                  repeat=settings.allow_music_repeat, cache_dir=profile_cache)
         write_json(settings.output / "audio_levels.json",
                    json.loads(soundtrack.with_suffix(".levels.json").read_text()))
         music = chosen
         beats = extract_beats(soundtrack, engine=args.beat_engine)
     print(f"Actions candidates : {len(actions)} | Beats : {len(beats)}")
-    edits = plan_edit(actions, beats, settings.duration_seconds, source_durations,
-                      allow_repeat=settings.allow_repeat, fps=settings.fps)
-    report = integrity_report(edits, actions, settings.duration_seconds)
+    if manifest.get('editorial') and not args.dry_run:
+        from .editorial import analyze_structure, plan_editorial, editorial_integrity
+        shots = []
+        shot_files = [_path(manifest['editorial_shots'], base)] if manifest.get('editorial_shots') else [p.with_suffix('.shots.json') for p in videos if p.with_suffix('.shots.json').exists()]
+        for shot_file in shot_files:
+            for shot in json.loads(shot_file.read_text()):
+                shot['source'] = str(_path(shot['source'], shot_file.parent))
+                shots.append(shot)
+        if not shots:
+            import statistics
+            if not actions or (settings.duration_seconds > 90 and statistics.median(a.duration for a in actions) > 12):
+                raise UltraError('Editorial review required: prepare .shots.json with safe/core boundaries and narrative inserts; long motion windows are not a finished edit')
+            # Existing fine action annotations are protected whole, never split into beat-sized fragments.
+            shots = [dict(source=a.source, safe_start=a.start, core_start=a.start,
+                          core_end=a.end, safe_end=a.end, peak=a.peak, label=a.label,
+                          quality=a.confidence, provenance=a.provenance) for a in actions]
+        for shot in shots:
+            if shot['source'] not in source_durations or shot['safe_end'] > source_durations[shot['source']]:
+                raise UltraError('Editorial shot outside collected sources')
+        if manifest.get('music_tracklist'):
+            tracks = json.loads(_path(manifest['music_tracklist'], base).read_text())
+            tracks = tracks['tracks'] if isinstance(tracks, dict) else tracks
+        elif prepared:
+            raise UltraError('Existing mix requires its retained music_tracklist; do not rebuild it')
+        else:
+            levels = json.loads(soundtrack.with_suffix('.levels.json').read_text())
+            tracks, at = [], 0.
+            for path, level in zip(music, levels):
+                end = min(settings.duration_seconds, at + level['usable_duration'])
+                tracks.append(dict(title=path.stem, timeline_start=at, timeline_end=end))
+                at = end-.7
+        legacy_root = _path(manifest['legacy_music_root'], base) if manifest.get('legacy_music_root') else None
+        structure = analyze_structure(soundtrack, tracks, cache_dir / 'music-structure', legacy_root)
+        write_json(settings.output / 'music_structure.json', structure)
+        intro = [Edit(**e) for e in json.loads(_path(manifest['intro_edits'], base).read_text())] if manifest.get('intro_edits') else []
+        outro = [Edit(**e) for e in json.loads(_path(manifest['outro_edits'], base).read_text())] if manifest.get('outro_edits') else []
+        if any(e.source not in source_durations or e.source_start < 0 or e.source_end > source_durations[e.source] for e in intro):
+            raise UltraError('Intro outside collected sources')
+        if any(e.source not in source_durations or e.source_start < 0 or e.source_end > source_durations[e.source] for e in outro):
+            raise UltraError('Outro outside collected sources')
+        edits = plan_editorial(shots, structure, settings.duration_seconds, intro=intro, outro=outro, fps=settings.fps)
+        report = editorial_integrity(edits, shots, settings.duration_seconds, intro=intro, outro=outro)
+        if report['violations']:
+            raise UltraError('Editorial integrity failed: ' + str(report['violations']))
+    else:
+        edits = plan_edit(actions, beats, settings.duration_seconds, source_durations,
+                          allow_repeat=settings.allow_repeat, fps=settings.fps)
+        report = integrity_report(edits, actions, settings.duration_seconds)
     write_json(settings.output / "action_integrity_report.json", report)
     write_json(settings.output / "edit_plan.json", [e.as_dict() for e in edits])
     write_json(settings.output / "source_report.json", {
         "inputs": [{"path": str(p), "fingerprint": fingerprint(p)} for p in videos],
         "music": [str(p) for p in music], "analysis": analysis_meta,
         "origin": settings.created_from, "sport": settings.sport, "style": settings.style})
+    if getattr(args, 'plan_only', False):
+        write_json(settings.output / 'render_inputs.json', dict(
+            soundtrack=str(soundtrack), width=settings.width, height=settings.height,
+            fps=settings.fps, source_volume=settings.source_volume,
+            music_volume=settings.music_volume, editorial=bool(manifest.get('editorial'))))
+        print(f'Prepared edit: {settings.output}', flush=True)
+        return 0
     if args.dry_run:
         print(f"Plan validé, {len(edits)} sections. Rapports : {settings.output}")
         return 0
-    result = render_edits(edits, soundtrack, settings.output / "montage.mp4",
-                          cache_dir / "segments", width=settings.width,
-                          height=settings.height, fps=settings.fps,
-                          source_volume=settings.source_volume,
-                          music_volume=settings.music_volume)
+    renderer = render_streamed if manifest.get('editorial') else render_edits
+    positional = () if manifest.get('editorial') else (cache_dir / 'segments',)
+    result = renderer(edits, soundtrack, settings.output / "montage.mp4", *positional,
+                      width=settings.width, height=settings.height, fps=settings.fps,
+                      source_volume=settings.source_volume, music_volume=settings.music_volume)
     thumbnail, metadata = _thumbnail_and_metadata(settings, edits, music)
     storyboard = create_storyboard(edits, settings.output / "storyboard.jpg")
     write_json(settings.output / "render_report.json", result)
@@ -298,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--beat-engine", choices=["fast", "librosa"], default="fast",
                    help="fast=FFmpeg+NumPy; librosa=beat tracker plus lent au premier démarrage")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument('--plan-only', action='store_true', help='Préparer le mix et le plan sans encoder la vidéo')
     p.set_defaults(func=create)
     p = sub.add_parser("publish", help="Uploader un montage existant", parents=[common])
     p.add_argument("video")

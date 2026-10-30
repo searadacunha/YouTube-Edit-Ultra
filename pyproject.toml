@@ -32,6 +32,7 @@ Issues = "https://github.com/searadacunha/YouTube-Edit-Ultra/issues"
 
 [project.scripts]
 ultra = "youtube_edit_ultra.cli:main"
+ueu = "youtube_edit_ultra.jobs:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

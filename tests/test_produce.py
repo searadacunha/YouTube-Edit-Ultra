@@ -4,6 +4,13 @@ from youtube_edit_ultra import catalogue
 from youtube_edit_ultra.spec import parse_prompt
 
 
+def catalogue_row(path, **metadata):
+    # Selection unit tests need real hash-bound files, not a decoder fixture.
+    path.write_bytes(("catalogue fixture: " + path.name).encode())
+    return dict(path=str(path), sha256=catalogue.sha256(path), available=True,
+                kind="audio", **metadata)
+
+
 def test_prompt_crawford():
     p = parse_prompt("Terence Crawford 30 minutes R&B 2000s")
     assert p == dict(
@@ -34,22 +41,20 @@ def test_scan_history_and_missing(tmp_path):
     assert not state["errors"]
 
 
-def test_select_requires_rights_and_deduplicates():
-    a = dict(
-        path="a",
-        sha256="one",
-        available=True,
-        kind="audio",
+def test_select_requires_rights_and_deduplicates(tmp_path):
+    a = catalogue_row(
+        tmp_path / "a.wav",
         title="Rompe",
         artist="Daddy Yankee",
         genre="reggaeton",
     )
-    b = dict(a, path="b", sha256="two", title="Rompe (Remix)")
+    b = catalogue_row(tmp_path / "b.wav", title="Rompe (Remix)",
+                      artist="Daddy Yankee", genre="reggaeton")
     state = catalogue.empty()
     state["media"] = {"a": a, "b": b}
     assert catalogue.select_music(state, "reggaeton", None)[0] == []
     state["permissions"] = {
-        k: {"evidence": "test ownership", "reuse": True} for k in ["one", "two"]
+        r["sha256"]: {"evidence": "test ownership", "reuse": True} for r in [a, b]
     }
     assert len(catalogue.select_music(state, "reggaeton", None)[0]) == 1
     state["used"] = [{"family": "rompe"}]
@@ -62,19 +67,16 @@ def test_scan_corrupt_history_reports_error(tmp_path):
     assert len(state["errors"]) == 1
 
 
-def test_spotify_match_requires_artist_and_version():
-    row = dict(
-        path="a",
-        sha256="x",
-        available=True,
-        kind="audio",
+def test_spotify_match_requires_artist_and_version(tmp_path):
+    row = catalogue_row(
+        tmp_path / "song.wav",
         title="Song",
         artist="Artist",
         genre="",
     )
     state = catalogue.empty()
     state["media"] = {"a": row}
-    state["permissions"] = {"x": {"reuse": True, "evidence": "owned"}}
+    state["permissions"] = {row["sha256"]: {"reuse": True, "evidence": "owned"}}
     playlist = {"tracks": [{"name": "Song (Remix)", "artists": [{"name": "Artist"}]}]}
     assert not catalogue.select_music(state, "anything", playlist)[0]
     playlist["tracks"][0]["name"] = "Song"
@@ -228,13 +230,13 @@ def test_produce_end_to_end(tmp_path):
 def test_changed_content_loses_authorization(tmp_path):
     p = tmp_path / "asset.mp3"
     p.write_bytes(b"first")
-    row = {"sha256": catalogue.sha256(p), "available": True}
+    row = {"path": str(p), "sha256": catalogue.sha256(p), "available": True}
     state = catalogue.empty()
     state["permissions"][row["sha256"]] = {"reuse": True, "evidence": "owner"}
     assert catalogue.permitted(state, row)
     p.write_bytes(b"changed")
-    row["sha256"] = catalogue.sha256(p)
     assert not catalogue.permitted(state, row)
+    assert row["available"] is False
 
 
 def test_duration_validation_on_real_export(tmp_path):
@@ -267,6 +269,8 @@ def test_duration_validation_on_real_export(tmp_path):
 
 
 def test_download_only_trusted_licensed_candidate(tmp_path, monkeypatch):
+    from youtube_edit_ultra import music_sources
+    monkeypatch.setattr(music_sources, 'acquire', lambda *args, **kwargs: dict(candidates=[], attempts=[], errors=[]))
     from youtube_edit_ultra import produce
     from youtube_edit_ultra.cli import main
 
@@ -315,7 +319,7 @@ def test_download_only_trusted_licensed_candidate(tmp_path, monkeypatch):
     )
     assert called == ["https://example.org/yes"]
     report = next((tmp_path / "out").glob("*/production_report.json"))
-    assert "test network unavailable" in json.loads(report.read_text())["warnings"]
+    assert any("test network unavailable" in w for w in json.loads(report.read_text())["warnings"])
 
 
 def test_ignore_marker(tmp_path):
@@ -327,20 +331,17 @@ def test_ignore_marker(tmp_path):
     assert not state["errors"] and not state["used"]
 
 
-def test_2000s_includes_2009_not_2010():
+def test_2000s_includes_2009_not_2010(tmp_path):
     state = catalogue.empty()
-    row = dict(
-        path="rnb-2000s/song.wav",
-        sha256="x",
-        available=True,
-        kind="audio",
+    row = catalogue_row(
+        tmp_path / "song.wav",
         title="New Song",
         artist="Artist",
         genre="rnb-2000s",
         release_date="2009-01-01",
     )
     state["media"] = {"song": row}
-    state["permissions"] = {"x": {"reuse": True, "evidence": "owner"}}
+    state["permissions"] = {row["sha256"]: {"reuse": True, "evidence": "owner"}}
     assert catalogue.select_music(state, "rnb-2000s", None)[0]
     row["release_date"] = "2010-01-01"
     assert not catalogue.select_music(state, "rnb-2000s", None)[0]

@@ -27,6 +27,8 @@ ATHLETE_SPORT = {
     "muratalla": "boxing", "da cunha": "boxing", "duran": "boxing",
 }
 STYLE_KEYS = {
+    "japanese hip-hop": "japanese-hip-hop", "japanese hip hop": "japanese-hip-hop",
+    "rap japonais": "japanese-hip-hop",
     "orchestral": "orchestral", "classical": "classical",
     "funk": "funk-brasileiro", "funk do brasil": "funk-brasileiro",
     "r&b 2000s": "rnb-2000s", "rnb 2000s": "rnb-2000s", "r&b": "rnb", "reggaeton": "reggaeton", "hip hop": "hip-hop", "hip-hop": "hip-hop",
@@ -49,12 +51,14 @@ def parse_duration(value: str | int | float) -> float:
     s = normalize(str(value)).strip()
     if not s:
         raise ValueError("Durée vide")
+    if re.search(r'-\s*\d', s):
+        raise ValueError('La durée doit être positive')
     compact = re.fullmatch(r"(\d+)h(\d{1,2})", s)
     if compact:
         return int(compact.group(1)) * 3600 + int(compact.group(2)) * 60
-    h = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:heures?|h)(?=\d|\s|$)", s)
+    h = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:heures?|hours?|h)(?=\d|\s|$)", s)
     m = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:m|mn|min|minutes?)\b", s)
-    sec = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:s|sec|secondes?)\b", s)
+    sec = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:s|sec|secondes?|seconds?)\b", s)
     if h or m or sec:
         return (float(h.group(1).replace(",", ".")) * 3600 if h else 0) + (float(m.group(1).replace(",", ".")) * 60 if m else 0) + (float(sec.group(1).replace(",", ".")) if sec else 0)
     if re.fullmatch(r"\d+(?:[.,]\d+)?", s):
@@ -108,19 +112,44 @@ def detect_athlete(prompt: str) -> str:
 # Otherwise parse_duration() never sees them and silently falls back to 5 minutes.
 PROMPT_DURATION = re.compile(
     r"(?<!\w)\d+(?:[.,]\d+)?\s*"
-    r"(?:h(?:eures?)?(?:\s*\d{1,2}\s*(?:m(?:n|in(?:utes?)?)?)?)?|"
-    r"m(?:n|in(?:utes?)?)?|s(?:ec(?:ondes?)?)?)\b"
+    r"(?:h(?:eures?|ours?)?(?:\s*\d{1,2}\s*(?:m(?:n|in(?:utes?)?)?)?)?|"
+    r"m(?:n|in(?:utes?)?)?|s(?:ec(?:ond(?:e)?s?)?)?)\b"
 )
 
 
 def parse_prompt(prompt: str) -> dict[str, Any]:
     found = PROMPT_DURATION.search(normalize(prompt))
+    fields = re.split(r"\s*(?:—|\||,|\s-\s)\s*", prompt.strip(), maxsplit=2)
+    if len(fields) == 3 and PROMPT_DURATION.search(normalize(fields[2])):
+        athlete = detect_athlete(fields[0])
+        if athlete == "Sport highlights":
+            athlete = fields[0].strip()
+        style = detect_style(fields[1])
+        if style == "default":
+            style = re.sub(r"[^a-z0-9]+", "-", normalize(fields[1])).strip("-")
+        return {"athlete": athlete, "sport": detect_sport(athlete), "style": style,
+                "duration_seconds": parse_duration(fields[2])}
     return {
         "athlete": detect_athlete(prompt),
         "sport": detect_sport(prompt),
         "style": detect_style(prompt),
         "duration_seconds": parse_duration(found.group()) if found else 300,
     }
+
+
+def parse_request(prompt: str) -> dict[str, Any]:
+    """One-shot requires the three user fields; legacy create keeps its defaults."""
+    request = parse_prompt(prompt)
+    if (not PROMPT_DURATION.search(normalize(prompt))
+            or request['athlete'] == 'Sport highlights'
+            or request['style'] in {'', 'default'}):
+        raise ValueError('Requis : boxeur, style musical et durée (ex. Crawford — R&B 2000s — 30m)')
+    duration = request['duration_seconds']
+    if not math.isfinite(duration) or not 0 < duration <= 4 * 3600:
+        raise ValueError('Durée requise supérieure à zéro et au plus quatre heures')
+    if request['sport'] == 'generic':
+        request['sport'] = 'boxing'
+    return request
 
 
 @dataclass

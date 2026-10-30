@@ -109,10 +109,12 @@ def test_candidate_list_is_not_usage(tmp_path):
     assert state["used"] == []
 
 
-def test_rnb_release_year_is_required():
+def test_rnb_release_year_is_required(tmp_path):
+    path = tmp_path / "song.wav"
+    path.write_bytes(b"release-year metadata fixture")
     row = {
-        "path": "rnb-2000s/song.wav",
-        "sha256": "x",
+        "path": str(path),
+        "sha256": catalogue.sha256(path),
         "available": True,
         "kind": "audio",
         "title": "New Song",
@@ -121,7 +123,7 @@ def test_rnb_release_year_is_required():
     }
     state = catalogue.empty()
     state["media"] = {"song": row}
-    state["permissions"] = {"x": {"reuse": True, "evidence": "original"}}
+    state["permissions"] = {row["sha256"]: {"reuse": True, "evidence": "original"}}
     assert not catalogue.select_music(state, "rnb-2000s", None)[0]
     row["release_date"] = "2004-01-01"
     assert len(catalogue.select_music(state, "rnb-2000s", None)[0]) == 1

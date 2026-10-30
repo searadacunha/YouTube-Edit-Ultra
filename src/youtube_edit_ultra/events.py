@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -33,6 +34,8 @@ class Action:
 def make_action(source: Path, start: float, peak: float, end: float, duration: float,
                 sport: str, label: str, confidence: float = 0.9,
                 provenance: str = "annotation", padding: float = 0.5) -> Action:
+    if not all(math.isfinite(float(x)) for x in (start, peak, end, duration, confidence, padding)):
+        raise UltraError(f"Action non finie : {source.name}")
     start = max(0.0, float(start) - padding)
     end = min(duration, float(end) + padding)
     peak = float(peak)
@@ -53,10 +56,27 @@ def from_json(path: Path, source: Path, duration: float, sport: str) -> list[Act
         raise UltraError(f"Format annotations non reconnu: {path}")
     if not isinstance(items, list):
         raise UltraError(f"'events' doit être une liste: {path}")
+    bound_hash = data.get("source_sha256") if isinstance(data, dict) else None
+    source_hash = None
+
+    def check_source(expected):
+        nonlocal source_hash
+        if expected is None:
+            return
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected):
+            raise UltraError(f"SHA-256 de source invalide : {path}")
+        if source_hash is None:
+            from .catalogue import sha256
+            source_hash = sha256(source)
+        if source_hash != expected.lower():
+            raise UltraError(f"Annotations liées à une autre empreinte de source : {path}")
+
+    check_source(bound_hash)
     result = []
     for e in items:
         if not isinstance(e, dict):
-            continue
+            raise UltraError(f"Événement non objet : {path}")
+        check_source(e.get("source_sha256"))
         if "position" in e and "start" not in e:
             # SoccerNet output: position is in milliseconds relative to half.
             peak = float(e["position"]) / 1000
@@ -72,9 +92,14 @@ def from_json(path: Path, source: Path, duration: float, sport: str) -> list[Act
             start = float(e.get("start", e.get("start_time", 0)))
             end = float(e.get("end", e.get("end_time", 0)))
             peak = float(e.get("peak", (start + end) / 2))
+            provenance = e.get("provenance", data.get('provenance', 'annotation')
+                               if isinstance(data, dict) else 'annotation')
+            if not isinstance(provenance, str) or not provenance.strip():
+                raise UltraError(f"Provenance d'annotation invalide : {path}")
             result.append(make_action(source, start, peak, end, duration, sport,
                                      str(e.get("label", "action")),
-                                     float(e.get("confidence", 1.0)), "annotation"))
+                                     float(e.get("confidence", 1.0 if provenance == "annotation" else .2)),
+                                     provenance))
     return result
 
 
@@ -97,9 +122,11 @@ def validate_no_overlap(actions: Iterable[Action], *, max_span: float = float("i
             merged.append(Action(prev.source, prev.start, stronger.peak,
                                  max(prev.end, action.end), prev.sport,
                                  "+".join(dict.fromkeys([prev.label, action.label])),
-                                 max(prev.confidence, action.confidence),
-                                 "annotation" if "annotation" in {prev.provenance, action.provenance}
-                                 else prev.provenance))
+                                 (max(prev.confidence, action.confidence)
+                                  if prev.provenance == action.provenance
+                                  else min(prev.confidence, action.confidence)),
+                                 (prev.provenance if prev.provenance == action.provenance
+                                  else "mixed:" + "+".join(sorted({prev.provenance, action.provenance})))))
     return merged
 
 

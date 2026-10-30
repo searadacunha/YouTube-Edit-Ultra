@@ -20,6 +20,11 @@ class Edit:
     source_peak: float | None
     provenance: str
     confidence: float
+    audio_intent: str = 'auto'
+
+    def __post_init__(self):
+        if self.audio_intent not in ('auto', 'mute', 'ambience', 'featured'):
+            raise UltraError('audio_intent must be auto, mute, ambience or featured')
 
     @property
     def duration(self) -> float:
@@ -63,9 +68,36 @@ def find_filler(duration: float, source_durations: dict[str, float], actions: li
     return None
 
 
+def _recover_plan(actions, edits, target, *, allow_repeat=False):
+    """Backtrack a bounded tail when greedy ranking strands a feasible whole action set."""
+    # shortcut: bounded tail search; report failure rather than cut cores on adversarial large sets.
+    for rewind in range(1, min(len(edits), 8) + 1):
+        prefix = edits[:-rewind]
+        at = prefix[-1].timeline_end if prefix else 0.0
+        pool = [a for a in actions if a.duration <= target - at + .0001
+                and (allow_repeat or not clashes(a, prefix))]
+        pool = sorted(pool, key=lambda a: (-a.confidence, -a.duration, a.source, a.start))[:128]
+        stack, seen = [(at, 0, [])], 0
+        while stack and seen < 5000:
+            now, begin, selected = stack.pop()
+            seen += 1
+            if abs(target - now) <= .025:
+                return prefix + selected
+            if len(selected) >= 64:
+                continue
+            for i in range(len(pool) - 1, begin - 1, -1):
+                a = pool[i]
+                if a.duration > target - now + .0001 or (not allow_repeat and clashes(a, selected)):
+                    continue
+                e = Edit(a.source, a.start, a.end, round(now, 3), round(now + a.duration, 3),
+                         a.label, a.peak, a.provenance, a.confidence)
+                stack.append((now + a.duration, i if allow_repeat else i + 1, selected + [e]))
+    return None
+
+
 def plan_edit(actions: list[Action], beats: list[float], target: float,
               source_durations: dict[str, float], *, allow_repeat: bool = False,
-              fps: int = 30, max_filler: float = 18.0) -> list[Edit]:
+              fps: int = 30, max_filler: float = 0.0) -> list[Edit]:
     if not actions:
         raise UltraError("Aucune séquence sportive repérée. Fournir des annotations .actions.json ou davantage de vidéos.")
     if fps <= 0:
@@ -106,11 +138,14 @@ def plan_edit(actions: list[Action], beats: list[float], target: float,
             raise UltraError("Limite de 1 000 événements dépassée")
     left = target - t
     if left > 0.025:
+        recovered = _recover_plan(unique, edits, target, allow_repeat=allow_repeat)
+        if recovered is not None:
+            return recovered
         if left > max_filler:
             remaining = sum(a.duration for a in unique if not used[(a.source, a.start, a.end)])
             raise UltraError(f"Matière sportive insuffisante : {t / 60:.2f} minutes sélectionnées sur {target / 60:.2f}. "
                              f"Ajouter des sources/actions (non utilisées : {remaining / 60:.1f} min). "
-                             "Aucune action ne sera coupée pour atteindre la durée.")
+                             "Recherche de combinaison bornée ; aucune action ne sera coupée pour atteindre la durée.")
         filler = find_filler(left, source_durations, unique, edits, t)
         if filler is None:
             raise UltraError(f"Impossible de combler les {left:.2f} dernières secondes sans couper une action ; "

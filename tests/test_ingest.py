@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -37,6 +38,11 @@ def test_url_cache_stays_scoped_and_preserves_requested_order(tmp_path, monkeypa
     ext = "mp3" if audio else "mp4"
 
     def fake_download(command):
+        if command[0] == "ffprobe":
+            return json.dumps({"streams": [{"codec_type": "audio" if audio else "video"}],
+                               "format": {"duration": "1"}})
+        if command[0] == "ffmpeg":
+            return "frame=30\nout_time_us=1000000\nprogress=end\n"
         pattern = command[command.index("-o") + 1]
         # Different URLs may have the same media ID on different hosts.
         output = Path(pattern.replace("%(id)s", "same-id").replace("%(ext)s", ext))
@@ -67,3 +73,39 @@ def test_partial_download_is_not_reported_as_a_video(tmp_path, monkeypatch):
     monkeypatch.setattr(media, "run", partial)
     with pytest.raises(media.UltraError, match="Aucune vidéo"):
         media.download_explicit(["https://example.org/source"], tmp_path)
+
+
+@pytest.mark.parametrize("suffix", [".f137.mp4", ".f251.webm", ".temp.mp4", ".orig.mp4"])
+def test_unmerged_intermediates_resume_without_becoming_final(tmp_path, monkeypatch, suffix):
+    url = "https://example.org/source"
+    prefix = "source-" + hashlib.sha256(url.encode()).hexdigest()[:20]
+    intermediate = tmp_path / (prefix + "-id" + suffix)
+    intermediate.write_bytes(b"retained intermediate")
+    final = tmp_path / (prefix + "-id.mp4")
+    calls, validated = [], []
+    def download(command, *args, **kwargs):
+        calls.append(command)
+        final.write_bytes(b"completed merged file")
+        return ""
+    monkeypatch.setattr(media, "downloader_command", lambda: ["yt-dlp"])
+    monkeypatch.setattr(media, "_guarded_download", download)
+    monkeypatch.setattr(media, "_validate_download", lambda path, kind: validated.append(path))
+    assert media.download_explicit([url], tmp_path) == [final]
+    assert len(calls) == 1 and validated == [final]
+    assert intermediate.read_bytes() == b"retained intermediate"
+    assert media.download_explicit([url], tmp_path) == [final]
+    assert len(calls) == 1 and validated == [final, final]
+
+
+def test_successful_command_with_only_intermediates_is_not_completion(tmp_path, monkeypatch):
+    url = "https://example.org/source"
+    def download(command, *args, **kwargs):
+        pattern = command[command.index("-o") + 1]
+        Path(pattern.replace("%(id)s", "id.f137").replace("%(ext)s", "mp4")).write_bytes(b"unmerged")
+        return ""
+    monkeypatch.setattr(media, "downloader_command", lambda: ["yt-dlp"])
+    monkeypatch.setattr(media, "_guarded_download", download)
+    monkeypatch.setattr(media, "_validate_download", lambda *a: None)
+    with pytest.raises(media.UltraError, match="Aucune vidéo"):
+        media.download_explicit([url], tmp_path)
+    assert len(list(tmp_path.glob("*.f137.mp4"))) == 1

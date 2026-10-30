@@ -51,3 +51,10 @@ def test_no_beat_forced_cut():
 
 def test_nearest_beat():
     assert nearest_beat_distance(2.25, [1, 2, 3]) == pytest.approx(.25)
+
+
+def test_shortfall_never_adds_unreviewed_filler_by_default():
+    source = Path('/tmp/fight.mp4')
+    actions = [make_action(source, 2, 5, 10, 30, 'boxing', 'exchange', padding=0)]
+    with pytest.raises(UltraError, match='insuffisante'):
+        plan_edit(actions, [], 10, {str(source): 30})

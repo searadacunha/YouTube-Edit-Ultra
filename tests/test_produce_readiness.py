@@ -70,14 +70,21 @@ def test_downloader_falls_back_or_explains_missing_dependency(monkeypatch):
 def test_preflight_reports_both_duration_shortfalls_without_render(tmp_path, monkeypatch):
     from youtube_edit_ultra.cli import main
     state = catalogue.empty()
+    video = tmp_path / 'Mike Tyson.mp4'
+    audio = tmp_path / 'hip-hop.wav'
+    video.write_bytes(b'preflight video metadata fixture')
+    audio.write_bytes(b'preflight audio metadata fixture')
     state['media'] = {
-        'v': dict(path='/media/Mike Tyson.mp4', title='Mike Tyson', kind='video',
-                  sha256='v', available=True, duration=63),
-        'a': dict(path='/media/hip-hop/a.wav', title='Unheard', artist='A', genre='hip-hop',
-                  kind='audio', sha256='a', available=True, duration=120),
+        str(video): dict(path=str(video), title='Mike Tyson', kind='video',
+                        sha256=catalogue.sha256(video), available=True, duration=63),
+        str(audio): dict(path=str(audio), title='Unheard', artist='A', genre='hip-hop',
+                        kind='audio', sha256=catalogue.sha256(audio), available=True, duration=120),
     }
-    state['permissions'] = {key: dict(reuse=True, evidence='test') for key in ['v', 'a']}
+    state['permissions'] = {row['sha256']: dict(reuse=True, evidence='test')
+                            for row in state['media'].values()}
     catalogue.save(tmp_path/'state/catalogue.json', state)
+    from youtube_edit_ultra import music
+    monkeypatch.setattr(music, 'audio_profile', lambda path, **kwargs: {'usable_duration': 120})
     monkeypatch.setattr(catalogue, 'scan', lambda roots, state: state)
     monkeypatch.setattr(produce.subprocess, 'run', lambda *a, **k: pytest.fail('Must not render or search'))
     assert main(['produce', 'Mike Tyson 30 minutes hip-hop', '--offline', '--state-dir',
@@ -85,3 +92,18 @@ def test_preflight_reports_both_duration_shortfalls_without_render(tmp_path, mon
     report = catalogue.read(next((tmp_path/'out').glob('*/production_report.json')))
     assert any('63.000' in b for b in report['blockers'])
     assert any('120.000' in b for b in report['blockers'])
+
+
+def test_canelo_nickname_matches_official_titles_without_alvarez():
+    assert produce.athlete_match('Canelo vs Cotto FULL FIGHT', 'Canelo Alvarez')
+    assert not produce.athlete_match('Boxing: Alvarez', 'Canelo Alvarez')
+
+
+def test_long_raw_video_is_not_complete_action_coverage(tmp_path):
+    import json
+    path = tmp_path / 'Canelo.mp4'
+    row = dict(path=str(path), sha256='same-file', duration=3600)
+    assert produce.annotated_coverage([row], 'boxing') == 0
+    path.with_suffix('.actions.json').write_text(json.dumps({'events': [
+        dict(start=10, peak=15, end=20), dict(start=18, peak=23, end=28)]}))
+    assert produce.annotated_coverage([row, row], 'boxing') == 19
