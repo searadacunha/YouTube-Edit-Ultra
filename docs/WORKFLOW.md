@@ -1,5 +1,7 @@
 # Technical workflow
 
+This page primarily describes the explicit-input **`ultra create`** compatibility interface. For the checkpointed `ueu create` flow (including streaming export and its rights/review gates), use [AUTONOMOUS_WORKFLOW.md](AUTONOMOUS_WORKFLOW.md). For narrated films and their separate voice/media prerequisites, use [DOCUMENTARY_MODE.md](DOCUMENTARY_MODE.md).
+
 1. `ultra create` parses a natural-language prompt, manifest and explicit options.
 2. Finds local athlete files in `library/videos`, or accepts local `--video` and rights-cleared explicit `--source` URLs.
 3. Picks the soundtrack from the matching local music genre, validates that enough music exists and crossfades tracks to the target duration.
