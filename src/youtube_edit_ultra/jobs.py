@@ -502,10 +502,13 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in {'_render', '_quality'}:
         return _worker(argv[0], argv[1])
+    if argv and argv[0] == 'documentary':
+        from .documentary import main as documentary
+        return documentary(argv[1:])
     if argv and argv[0] not in {'create', 'resume', 'status', '-h', '--help'}:
         from .cli import main as legacy
         return legacy(argv)
-    parser = argparse.ArgumentParser(prog='ueu', description='Athlete + music style + duration → verified MP4 or explicit blocker')
+    parser = argparse.ArgumentParser(prog='ueu', description='Athlete + music style + duration → verified MP4 or explicit blocker. Narrated films: ueu documentary --spec FILE.yaml')
     commands = parser.add_subparsers(dest='command', required=True)
     create = commands.add_parser('create')
     create.add_argument('prompt')

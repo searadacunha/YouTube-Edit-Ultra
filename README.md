@@ -95,6 +95,19 @@ See [the autonomous workflow](docs/AUTONOMOUS_WORKFLOW.md) for permissions, revi
 annotations, disk requirements and exact gates. `ultra create` and `ultra produce`
 remain compatible legacy interfaces. `ueu create` never publishes.
 
+## Narrated documentaries
+
+```bash
+ueu documentary --spec projects/<film>.yaml --preview 345 45   # test excerpt
+ueu documentary --spec projects/<film>.yaml                    # full film + QC
+```
+
+Voice-over in any Qwen3-TTS language (MLX), from a designed voice or a consented recording
+(x-vector cloning), with ASR, negation and resemblance checks and extra dubbed audio tracks
+that fit an existing edit. Word-aligned ASS/SRT subtitles, annotated freezes,
+honest slow motion, split screens and data cards, every claim tied to a verified fact and
+every shot to a reviewed source window. See [docs/DOCUMENTARY_MODE.md](docs/DOCUMENTARY_MODE.md).
+
 ## Quick start
 
 ### macOS: Apple Silicon or Intel

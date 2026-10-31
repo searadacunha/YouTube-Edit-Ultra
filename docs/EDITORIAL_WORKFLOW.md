@@ -26,6 +26,16 @@ Le parcours `ueu` exige une provenance explicite admise. Sinon il conserve les c
 
 `kind: "insert"` désigne un insert contextualisé et `peak` peut être `null`. `kind: "intro"` ou `"outro"` réserve du contexte revu en ouverture/conclusion, dans le budget du job. Ne pas inventer une entrée absente des rushs. Un manifeste explicite peut aussi fournir `intro_edits` et `outro_edits`, listes d'objets `Edit` contigus. `not_before/not_after` contraint une fenêtre héroïque.
 
+Pour une image fixe locale (PNG, JPEG ou WebP non animé), préparer un clip compatible avec ce même pipeline :
+
+```bash
+ultra insert-image /media/meme.png /projet/meme-insert.mp4 --duration 1.5
+```
+
+La commande conserve le ratio dans un cadre 1920×1080 à 30 fps, sans audio, puis décode le résultat. Elle refuse les sorties existantes et respecte le plancher disque. Les images fixes sont limitées à moins de deux secondes et à la grille des images : ce format couvre les mèmes courts sans désactiver la détection des gels. Pour une animation, utiliser sa vidéo et les annotations habituelles. Ne pas juxtaposer plusieurs copies d'un même insert pour contourner cette limite.
+
+Le fichier `.insert.json` conserve les empreintes de l'image et du clip, ainsi qu'un `candidate_shot` de type `insert`, muet, avec provenance `candidate_still_insert`. Ce candidat n'est pas une annotation revue. Examiner réellement l'image et son placement entre deux actions complètes avant de rédiger les `.shots.json`; conserver cette preuve d'origine et enregistrer séparément les autorisations couvrant l'image et son clip dérivé. La préparation ne crée aucune permission dans le catalogue. Le storyboard et les contrôles habituels utilisent ensuite ce MP4 comme les autres sources.
+
 Les cœurs restent entiers, même au-delà de 12 secondes. Le planificateur choisit des fins naturelles compatibles avec les accents, varie les durées et évite la réutilisation des intervalles. Le retour arrière est borné; un échec n'est pas une preuve exhaustive d'impossibilité. Aucun filler non revu n'est ajouté par défaut.
 
 Le dédoublonnage perceptuel échantillonné compare des encodages différents, préfère les cœurs longs et protège leurs fins échantillonnées. Il ne garantit pas la reconnaissance d'autres angles, recadrages ou événements entre échantillons. Exclusions et limites de calcul restent dans le rapport; un scan incomplet bloque le job.

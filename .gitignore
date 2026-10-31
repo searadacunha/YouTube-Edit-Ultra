@@ -36,3 +36,5 @@ JOURNAL_AGENTS.md
 build/
 dist/
 .worktrees/
+# Film specs name private sources, voices and rights decisions: keep them local.
+projects/*.yaml

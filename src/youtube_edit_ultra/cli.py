@@ -310,7 +310,7 @@ def publish(args: argparse.Namespace) -> int:
     desc = args.description or meta.get("description", "Sports music montage")
     thumb = Path(args.thumbnail) if args.thumbnail else video.parent / "thumbnail.jpg"
     result = upload(video, title=title, description=desc, tags=meta.get("tags", []),
-                    privacy=args.privacy, thumbnail=thumb)
+                    privacy=args.privacy, thumbnail=thumb, synthetic_media=meta.get("synthetic_media", False))
     print(result["url"])
     return 0
 
@@ -335,6 +335,15 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=init)
     p = sub.add_parser("doctor", help="Afficher les dépendances", parents=[common])
     p.set_defaults(func=doctor)
+    from .inserts import insert_image_command
+    p = sub.add_parser('insert-image', help='Préparer un insert fixe court, sans valider ses droits', parents=[common])
+    p.add_argument('image')
+    p.add_argument('output')
+    p.add_argument('--duration', type=float, required=True, help='Durée < 2 secondes, sur la grille des images')
+    p.add_argument('--width', type=int, default=1920)
+    p.add_argument('--height', type=int, default=1080)
+    p.add_argument('--fps', type=int, default=30)
+    p.set_defaults(func=insert_image_command)
     p = sub.add_parser("create", help="Fabriquer un mix MP4 et éventuellement le publier", parents=[common])
     p.add_argument("prompt", nargs="?", default="", help="Ex. 'Cristiano Ronaldo 30 minutes hip-hop'")
     p.add_argument("--spec", help="Fichier YAML de projet")

@@ -22,6 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 download = ["yt-dlp[default]>=2025.1.0"]
 scenes = ["scenedetect>=0.7,<1"]
+documentary = ["pysubs2>=1.7,<2"]
 youtube = ["google-api-python-client>=2,<3", "google-auth-oauthlib>=1,<2", "google-auth-httplib2>=0.2,<1"]
 all = ["yt-dlp[default]>=2025.1.0", "scenedetect>=0.7,<1", "google-api-python-client>=2,<3", "google-auth-oauthlib>=1,<2", "google-auth-httplib2>=0.2,<1"]
 dev = ["pytest>=8,<10", "ruff>=0.8"]

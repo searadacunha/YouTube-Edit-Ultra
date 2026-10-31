@@ -22,7 +22,7 @@ class UltraError(RuntimeError):
     """Actionable editing error."""
 
 
-DISK_GUARD_CONFIG = Path.home() / "Documents/Systeme/disk-guard/config.json"
+DISK_GUARD_CONFIG = Path.home() / ".config/disk-guard/config.json"
 
 
 def floor_bytes() -> int:

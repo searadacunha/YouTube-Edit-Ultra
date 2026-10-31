@@ -43,7 +43,8 @@ def client():
 
 
 def upload(video: Path, *, title: str, description: str, tags: list[str],
-           privacy: str, thumbnail: Path | None = None, state_path: Path | None = None) -> dict:
+           privacy: str, thumbnail: Path | None = None, state_path: Path | None = None,
+           synthetic_media: bool = False) -> dict:
     if privacy not in {"private", "unlisted", "public"}:
         raise UltraError("Publication explicite requise : private, unlisted ou public")
     if not video.is_file():
@@ -60,7 +61,9 @@ def upload(video: Path, *, title: str, description: str, tags: list[str],
         part="snippet,status",
         body={"snippet": {"title": title[:100], "description": description[:5000],
                           "tags": tags[:35], "categoryId": "17"},
-              "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}},
+              "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False,
+                         # YouTube disclosure for realistic altered/synthetic content (e.g. a cloned voice)
+                         "containsSyntheticMedia": bool(synthetic_media)}},
         media_body=MediaFileUpload(str(video), mimetype="video/mp4",
                                    chunksize=8 * 1024 * 1024, resumable=True),
     )

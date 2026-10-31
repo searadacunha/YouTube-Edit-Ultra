@@ -4,7 +4,7 @@ import sys
 
 from .media import UltraError, require_space
 
-GUARD_SCRIPT = Path.home() / 'Documents/Systeme/disk-guard/diskguard.py'
+GUARD_SCRIPT = Path.home() / '.local/lib/disk-guard/diskguard.py'
 
 
 def guarded_command(command, *, need, path, label):
