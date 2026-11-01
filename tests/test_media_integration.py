@@ -54,7 +54,8 @@ def test_render_failure_retains_prior_output_and_cleans_partials(tmp_path, monke
     audio.write_bytes(b"music fixture only; decoder mocked")
     output = tmp_path / "finished.mp4"
     output.write_bytes(b"user's earlier finished output")
-    edits = [make_action(source, 0, 0.5, 1, 1, "generic", "action", padding=0)]
+    action = make_action(source, 0, 0.5, 1, 1, "generic", "action", padding=0)
+    edits = plan_edit([action], [], 1, {str(source.resolve()): 1})
     monkeypatch.setattr(render_module, "fingerprint", lambda _: "source-hash")
 
     def mock_segment(edit, out, **kwargs):
