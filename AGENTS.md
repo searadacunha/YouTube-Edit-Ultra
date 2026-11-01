@@ -7,7 +7,7 @@ Read [docs/AUTONOMOUS_WORKFLOW.md](docs/AUTONOMOUS_WORKFLOW.md) before music-hig
 - Prefer `ueu create "<athlete> — <style> — <duration>"`, then `ueu status JOB` / `ueu resume JOB`. Run `ultra doctor` first. Reinstall the editable package after console-entrypoint changes. Preserve the `ultra` interfaces and the Stop-Bullshiting banner.
 - Inspect the existing manifest, journal, running workers, reports and input hashes before resuming. Reuse verified checkpoints; do not rerun acquisition or rebuild an accepted soundtrack/thumbnail merely because the video stage failed. A changed verified artifact requires a new job.
 - State normally lives in `~/.local/share/youtube-edit-ultra/`; jobs in `output/jobs/`. Catalogue scans do not copy media. Never touch RuView or Trash. Mark generated fixtures and unrelated trees with `.ultra-ignore`.
-- Review the actual blocker, then continue available source/evidence research or frame review within the user's authorized task. Do not ask the user to coordinate downloads or assembly. Missing indispensable permissions, access, reviewed boundaries or capacity remain explicit blockers, never invented success.
+- Review the actual blocker, then continue available source/evidence research or frame review within the user's authorized task. Do not ask the user to coordinate downloads or assembly. Missing indispensable permissions, access or capacity remain explicit blockers, never invented success. For personal offline edits with explicit local --root paths, --attest-local-media records the user's attestation (not independent rights verification); --auto-actions can use heuristic windows without pretending they were reviewed.
 
 ## Documentary-specific guardrails
 
@@ -19,13 +19,13 @@ Read [docs/AUTONOMOUS_WORKFLOW.md](docs/AUTONOMOUS_WORKFLOW.md) before music-hig
 ## Rights and musical constraints
 
 - Local presence, public access, an official uploader or Content ID acceptance is not permission. Retain URL, metadata, actual evidence and intended scope. Register hash-bound grants with `ultra catalogue authorize` / `authorize-url`; do not turn a project-specific private-use decision into a general publication grant.
-- Personal mode still requires evidence. Commercial mode requires explicit licence, reviewer/date, adaptation, distribution and monetization scope for both music and footage, plus required credit. Recorded evidence does not guarantee ownership or monetization. No access-control or DRM bypass.
+- Personal mode normally requires evidence. Explicit --attest-local-media may record the user's attestation for relevant media in explicit local --root paths, for personal edits only; never describe it as independently verified. Commercial mode requires explicit licence, reviewer/date, adaptation, distribution and monetization scope for both music and footage, plus required credit. No access-control or DRM bypass.
 - Spotify is authenticated, fully paginated metadata only. Genre requests can use admissible local audio when optional Spotify access fails; explicit playlists remain binding. Offline playlist caches are prior snapshots. Keep OAuth tokens and callbacks private and outside git.
 - Licensed catalogue music can fill a genre request, but modern stock is not a historical R&B 2000s recording. Preserve decade, language/style constraints and known title-family exclusions. Never repeat music or sports actions automatically. Missing history is not evidence of no reuse.
 
 ## Editorial evidence and audio
 
-- One-shot jobs require explicit reviewed action provenance. Motion, scene and sampled Ollama results remain candidates, regardless of confidence or file format. Preserve provenance on import/merge. Do not label motion boundaries reviewed without seeing the action.
+- One-shot jobs prefer reviewed action provenance. Opt-in --auto-actions may use motion candidates when no sidecar exists, keeping provenance='heuristic' and an unverified report. Preserve provenance on import/merge. Do not label motion boundaries reviewed without seeing the action.
 - Protect complete combinations and KO aftermath over beat placement. Use reviewed `.shots.json` cores/margins, optional source SHA-256, contextual intro/outro tags and explicit audio intent. Long cores are allowed; do not split them to satisfy a cut-rate target.
 - Portable FFmpeg/NumPy music analysis is default. `legacy_music_root` is only an explicit compatibility backend. Do not assume other historical repositories exist or invent rhythm/downbeats.
 - `audio_intent` accepts `auto`, `mute`, `ambience`, `featured`. Featured audio must be an explicit editorial choice, not guessed dialogue detection. Its gain is bounded and music ducks smoothly; ordinary ambience keeps its 20 dB cap. Final true peak must still be measured.
@@ -33,7 +33,7 @@ Read [docs/AUTONOMOUS_WORKFLOW.md](docs/AUTONOMOUS_WORKFLOW.md) before music-hig
 
 ## Storage and completion
 
-- Keep the normal 12 GB remaining-space floor. Estimates and installed disk-guard reservations precede heavy writes. Never lower `reserve_bytes` / `DISKGUARD_FLOOR_BYTES`, add `--accord`, split a blocked operation or reuse an earlier exception to evade the guard.
+- The normal 12 GB remaining-space floor protects other processes, including PolySentinel. The shared installed disk-guard configuration is outside this repository: do not silently change other processes' reservations. Reduce intermediates, safely clean verified job-owned temporaries or choose a separate output volume. Never label a capacity-blocked export complete.
 - Preserve originals and final outputs. Streaming uses one bounded MP4 and an audio temporary, not per-shot MP4 copies. Audio recovery copies video packets and verifies their hash before delivery. Only explicitly owned job temporaries may be cleaned after verified delivery; no personal file deletion.
 - Read final full-decode/quality logs, duration/frame/geometry checks, true-peak result, sampled duplicate report and action-core integrity. Incomplete checks block delivery. `COMPLETE_TECHNICAL` is not artistic acceptance, continuous human viewing or guaranteed monetization.
 - No publication or external mutation is implied by local export. Git commits/pushes are permitted only within the user's authorized task; do not rewrite history. Append verified work, exact evidence, limitations and next steps to `JOURNAL_AGENTS.md` under the common protocol.

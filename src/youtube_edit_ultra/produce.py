@@ -196,6 +196,11 @@ def locked(args, folder, *, output=None, prepare_only=False):
 
     request = getattr(args, 'request', None) or parse_prompt(args.prompt)
     mode = getattr(args, 'mode', 'personal')
+    if getattr(args, 'attest_local_media', False):
+        if mode != 'personal':
+            raise UltraError('Local user attestation is for personal edits, not commercial licensing')
+        if not getattr(args, 'roots', None):
+            raise UltraError('--attest-local-media requires explicit --root paths; refusing to attest the whole home directory')
     if request["athlete"] == "Sport highlights":
         raise UltraError(
             "Sportif non reconnu ; préciser un nom supporté ou utiliser ultra create --athlete"
@@ -228,6 +233,33 @@ def locked(args, folder, *, output=None, prepare_only=False):
     try:
         print("Catalogue : recherche et indexation des médias locaux", flush=True)
         cat.scan(roots, state)
+        if getattr(args, 'attest_local_media', False):
+            # The caller explicitly accepts responsibility for media under
+            # named local roots. This is an attestation, never a verified licence.
+            explicit_roots = [Path(p).expanduser().resolve() for p in args.roots]
+            attested = []
+            for row in state['media'].values():
+                if not row.get('available') or row['kind'] not in {'video', 'audio'}:
+                    continue
+                path = Path(row['path']).resolve()
+                if not any(path == root or path.is_relative_to(root) for root in explicit_roots):
+                    continue
+                if row['kind'] == 'video':
+                    if not relevant_video(row, request['athlete']):
+                        continue
+                elif not cat.music_style_matches(row, request['style']):
+                    continue
+                if cat.permitted(state, row, mode=mode):
+                    continue
+                state['permissions'][row['sha256']] = cat.permission_grant(
+                    'Explicit user attestation via --attest-local-media; ownership not independently verified',
+                    mode='personal', basis='user_attested_not_independently_verified')
+                attested.append(dict(path=row['path'], sha256=row['sha256'], kind=row['kind']))
+            cat.save(out / 'local_attestation_report.json',
+                     dict(mode='personal', independently_verified=False, assets=attested))
+            if attested:
+                report['warnings'].append(
+                    f'{len(attested)} local assets used on explicit user attestation; no independent rights verification')
         cat.save(folder / "catalogue.json", state)
         cat.save(
             out / "scan_report.json",
