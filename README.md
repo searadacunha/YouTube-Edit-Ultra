@@ -257,3 +257,8 @@ FFmpeg is required for the media integration tests. The CI workflow runs the sui
 [Technical workflow](docs/WORKFLOW.md) · [Action policy](docs/ACTION_POLICY.md) · [Maintainer publishing notes](docs/GITHUB.md) · [Third-party components](THIRD_PARTY.md)
 
 **License:** [MIT](LICENSE), copyright Benjamin Da Cunha. Input media and third-party dependencies retain their respective rights and licenses.
+
+
+## Output safety and concurrency
+
+Final video creation writes to a unique partial MP4 in the destination folder, verifies audio/video streams and duration, then replaces the requested output atomically. Failed renders leave an earlier completed output untouched and remove their temporary files. Each invocation uses a private temporary composition directory to avoid manifest/concat collisions; reusable segment files are written through unique partials. This behavior is regression-tested, including a deliberately interrupted synthetic render. It does **not** establish correctness of sport-event detection, which still needs independently annotated real footage.
