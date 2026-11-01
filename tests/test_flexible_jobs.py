@@ -1,6 +1,5 @@
 """Opt-in flexibility must not mislabel heuristic footage or silently grant online rights."""
 from argparse import Namespace
-from pathlib import Path
 
 import pytest
 
