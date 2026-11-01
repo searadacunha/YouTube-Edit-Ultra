@@ -144,7 +144,9 @@ def _review(job, args, resources):
     from .vision import analyze
     from .duplicates import deduplicate_shots
     accepted = {'annotation', 'visual_review', 'visual_sample_review', 'human_review'}
+    automatic_actions = bool(getattr(args, 'auto_actions', False))
     shots, unreviewed, evidence_files = [], [], []
+    automatic_candidates_used = 0
     for asset in resources['assets']:
         if asset['kind'] != 'video':
             continue
@@ -186,11 +188,26 @@ def _review(job, args, resources):
         else:
             actions, stats = analyze(source, job.path / 'cache/vision', args.request['sport'])
             candidate_file = job.path / 'review' / (asset['sha256'][:16] + '.candidates.json')
+            # Automatic windows are proposals, not visually verified boxing actions.
+            # An explicit opt-in allows an offline personal montage to use those
+            # windows without falsifying their provenance or human-review status.
+            status = 'AUTOMATIC_UNVERIFIED' if automatic_actions else 'CANDIDATES_REQUIRE_REVIEW'
             cat.save(candidate_file, dict(source=str(source), source_sha256=asset['sha256'],
-                                         candidates=[a.as_dict() for a in actions], analysis=stats,
-                                         status='CANDIDATES_REQUIRE_REVIEW'))
-            unreviewed.append(dict(source=str(source), reason='No documented action boundaries',
+                                          candidates=[a.as_dict() for a in actions], analysis=stats,
+                                          status=status))
+            unreviewed.append(dict(source=str(source),
+                                   reason='Automatic motion windows, not visually verified'
+                                   if automatic_actions else 'No documented action boundaries',
                                    candidates=str(candidate_file)))
+            if automatic_actions:
+                for action in actions:
+                    shots.append(dict(source=str(source),
+                                      safe_start=action.start, core_start=action.start,
+                                      core_end=action.end, safe_end=action.end,
+                                      peak=action.peak, quality=action.confidence,
+                                      label=action.label, provenance='heuristic',
+                                      source_sha256=asset['sha256']))
+                    automatic_candidates_used += 1
     if not shots:
         cat.save(job.path / 'review_required.json', dict(status='ACTION_REVIEW_REQUIRED', sources=unreviewed))
         raise UltraError('ACTION_REVIEW_REQUIRED: source motion cannot certify complete combinations/KO; '
@@ -213,7 +230,10 @@ def _review(job, args, resources):
                            if s['path'] in {row['source'] for row in retained}]
     cat.save(job.path / 'edit_project.json', manifest)
     return dict(artifacts=[str(job.path / n) for n in ('shots.json', 'shot_duplicates.json', 'edit_project.json')]
-                + evidence_files, ignored_unreviewed_sources=unreviewed, semantic_completeness_guaranteed=False)
+                + evidence_files, ignored_unreviewed_sources=unreviewed,
+                automatic_candidates_used=automatic_candidates_used,
+                action_review_status='UNVERIFIED_AUTOMATIC' if automatic_candidates_used else 'ANNOTATED',
+                semantic_completeness_guaranteed=False)
 
 
 def context_edits(shots, target, fps):
@@ -386,7 +406,17 @@ def execute(args):
     options = vars(args).copy();options.pop('func', None)
     if args.command == 'resume':
         job = Job(args.job)
-        options = job.state['options']
+        options = dict(job.state['options'])
+        # Explicit resume switches may enable automation without rewriting or
+        # silently discarding already verified stage artifacts.
+        for name in ('auto_actions', 'attest_local_media'):
+            if getattr(args, name, None) is True and not options.get(name, False):
+                options[name] = True
+        if getattr(args, 'roots', None):
+            options['roots'] = list(args.roots)
+        if options != job.state['options']:
+            job.state['options'] = options
+            job.save()
         args = argparse.Namespace(**options)
     else:
         args.request = parse_request(args.prompt)
@@ -395,7 +425,7 @@ def execute(args):
                  width=args.width, height=args.height, fps=args.fps)
         options['request'] = args.request
         key = {k: options[k] for k in ('request', 'mode', 'width', 'height', 'fps', 'roots', 'state_dir',
-                                     'playlist', 'offline', 'desktop')}
+                                     'playlist', 'offline', 'desktop', 'auto_actions', 'attest_local_media')}
         key['output_dir'] = str(Path(args.output_dir).expanduser().resolve())
         digest = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:12]
         name = f"{slug(args.request['athlete'])}-{digest}"
@@ -518,13 +548,21 @@ def main(argv=None):
     create.add_argument('--root', dest='roots', action='append')
     create.add_argument('--playlist')
     create.add_argument('--offline', action='store_true')
+    create.add_argument('--auto-actions', action='store_true',
+                        help='Use unverified heuristic motion windows when annotations are missing')
+    create.add_argument('--attest-local-media', action='store_true',
+                        help='Accept user-attested media under explicit --root paths for personal local edits')
     create.add_argument('--desktop', action='store_true')
     create.add_argument('--new-job', action='store_true')
     create.add_argument('--width', type=int, default=1920)
     create.add_argument('--height', type=int, default=1080)
     create.add_argument('--fps', type=int, default=30)
     create.set_defaults(strict_actions=True, semantic_model=None)
-    resume = commands.add_parser('resume');resume.add_argument('job')
+    resume = commands.add_parser('resume')
+    resume.add_argument('job')
+    resume.add_argument('--auto-actions', action='store_true', default=None)
+    resume.add_argument('--attest-local-media', action='store_true', default=None)
+    resume.add_argument('--root', dest='roots', action='append', default=None)
     status = commands.add_parser('status');status.add_argument('job')
     args = parser.parse_args(argv)
     try:
