@@ -412,6 +412,8 @@ def execute(args):
         for name in ('auto_actions', 'attest_local_media'):
             if getattr(args, name, None) is True and not options.get(name, False):
                 options[name] = True
+        if getattr(args, 'roots', None):
+            options['roots'] = list(args.roots)
         if options != job.state['options']:
             job.state['options'] = options
             job.save()
@@ -560,6 +562,7 @@ def main(argv=None):
     resume.add_argument('job')
     resume.add_argument('--auto-actions', action='store_true', default=None)
     resume.add_argument('--attest-local-media', action='store_true', default=None)
+    resume.add_argument('--root', dest='roots', action='append', default=None)
     status = commands.add_parser('status');status.add_argument('job')
     args = parser.parse_args(argv)
     try:
