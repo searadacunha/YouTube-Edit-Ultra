@@ -8,7 +8,7 @@ ueu create "Naoya Inoue — Japanese hip-hop — 20 minutes"
 
 `ueu create` orchestrates discovery, authorized acquisition, source validation, reviewed action selection, playlist construction, music analysis, planning, mixing, export, quality control and delivery. It returns a verified local MP4 when the required inputs exist, or a persisted blocker. It never publishes to YouTube.
 
-**Reviewed action boundaries remain a prerequisite.** Motion and sampled visual analysis propose candidates; they cannot certify boxer identity, complete combinations or a knockout's aftermath. Missing or unverified annotations block the one-shot job. Technical checks do not establish continuous human viewing or artistic acceptance.
+**Reviewed action boundaries are the default.** Optional `--auto-actions` allows unverified motion windows to be selected if sidecars are missing. They keep heuristic provenance; the report must never claim verified boxer identity, complete combinations or a knockout. Technical checks do not establish continuous human viewing or artistic acceptance.
 
 ## Installation and commands
 
@@ -33,6 +33,8 @@ After changes to console entry points, rerun the editable install. `ultra create
 | `--state-dir /path/state` | Separate persistent catalogue and permissions |
 | `--output-dir /path/jobs` | Job parent directory; default `output/jobs` |
 | `--offline` | Local inputs; explicit Spotify playlists require a matching complete cached snapshot |
+| `--auto-actions` | Opt in to automatic, unverified motion candidate windows when annotations are missing |
+| `--attest-local-media` | Explicit personal-use attestation for relevant files under explicit `--root` paths; not independently verified |
 | `--playlist URL` | Bind selection to requested Spotify playlist metadata |
 | `--mode personal` | Default: documented permission for the intended personal use |
 | `--mode commercial` | Explicit commercial scope for every audiovisual and musical asset |
@@ -40,13 +42,13 @@ After changes to console entry points, rerun the editable install. `ultra create
 | `--new-job` | Distinct job instead of reusing its stable identifier |
 | `--width`, `--height`, `--fps` | Override default 1920×1080 at 30 fps |
 
-Use `ueu create --help` for the installed interface. This command exposes no repeat, publication or disk-floor override. Resume after correcting a blocker; create a new job when verified checkpoint artifacts or input bytes change. An interrupted render restarts its render stage, not acquisition and planning from scratch.
+Use `ueu create --help` for the installed interface. This command exposes no repeat, publication or disk-floor override. Resume with `ueu resume JOB --auto-actions --attest-local-media` to explicitly enable those options on a previously blocked job. Create a new job when verified checkpoint artifacts or input bytes change. An interrupted render restarts its render stage, not acquisition and planning from scratch.
 
 ## Discovery and rights
 
 State defaults to `~/.local/share/youtube-edit-ultra/`. Scans normally inspect Documents, Music, Movies, Downloads and Desktop without copying media. RuView, Trash, symlink directories, dependency trees and `.ultra-ignore` folders are excluded. Errors and incomplete historical coverage remain in reports.
 
-Local files, public URLs, official channels and successful Content ID checks do not establish permission. Register actual evidence once; grants are bound to content hashes:
+Local files, public URLs, official channels and successful Content ID checks do not establish permission. For personal local edits, a user may explicitly attest eligible files under named `--root` paths using `--attest-local-media`; the stored grant is marked *user-attested, not independently verified* and cannot qualify for commercial-mode output. Otherwise register actual evidence once; grants are bound to content hashes:
 
 ```bash
 ultra catalogue authorize /media/owned-bout.mp4 --athlete 'Terence Crawford' \
@@ -85,7 +87,7 @@ Use the actual printed URL and callback; keep tokens and callbacks out of shared
 
 ## Actions, narrative and audio
 
-Adjacent `.shots.json` files supply reviewed safe margins and protected cores. `.actions.json` supplies whole reviewed windows. One-shot production requires explicit accepted provenance (`annotation`, `visual_review`, `visual_sample_review` or `human_review`) in the real evidence. Do not rename generated motion windows as reviewed. Optional `source_sha256` binds annotations to source bytes.
+Adjacent `.shots.json` files supply reviewed safe margins and protected cores. `.actions.json` supplies whole reviewed windows. By default one-shot production requires explicit accepted provenance (`annotation`, `visual_review`, `visual_sample_review` or `human_review`) in the real evidence. With `--auto-actions`, missing sidecars use candidate windows marked `heuristic`, not `reviewed`. Do not rename generated motion windows as reviewed. Optional `source_sha256` binds annotations to source bytes.
 
 Missing boundaries produce `review_required.json` and, where scanning is needed, candidate files in `review/`. The agent may inspect available footage and add verified boundaries. If that cannot be completed, report the exact blocker; never invent annotations to make the job pass.
 
