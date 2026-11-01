@@ -323,3 +323,28 @@ def test_interruption_after_delivery_does_not_bypass_foreign_music_usage(tmp_pat
     assert catalogue.read(path / "manifest.json")["status"] == "BLOCKED"
     assert len(catalogue.read(state_dir / "catalogue.json")["used"]) == 1
     assert catalogue.sha256(Path(manifest["delivery"]["video"])) == manifest["delivery"]["sha256"]
+
+
+def test_local_media_attestation_requires_explicit_opt_in(tmp_path):
+    args, state_dir, source, music = fixture_job(tmp_path, authorized=False)
+    assert jobs.main(args + ["--attest-local-media"]) == 0
+    _, manifest = job_state(tmp_path)
+    assert manifest["status"] == "COMPLETE_TECHNICAL"
+    state = catalogue.read(state_dir / "catalogue.json")
+    for p in (source, music):
+        grant = state["permissions"][catalogue.sha256(p)]
+        assert grant["basis"] == "user_attested_not_independently_verified"
+        assert grant["scope"] == "personal"
+    video = Path(manifest["delivery"]["video"])
+    report = catalogue.read(video.parent / "rights_report.json")
+    assert report["independent_ownership_verification"] is False
+    assert not manifest["delivery"]["publication_performed"]
+
+
+def test_local_attestation_cannot_claim_commercial_rights(tmp_path):
+    args, _, _, _ = fixture_job(tmp_path, authorized=False)
+    assert jobs.main(args + ["--mode", "commercial", "--attest-local-media"]) == 2
+    _, state = job_state(tmp_path)
+    assert state["status"] == "BLOCKED"
+    assert "personal edits" in state["error"]
+    assert not state.get("delivery")
