@@ -71,25 +71,49 @@ def iou(a: dict, b: dict) -> float:
     return overlap / union if union > 0 else 0.0
 
 
-def greedy_matches(truth: list[dict], predicted: list[dict], threshold: float) -> list[tuple[int, int]]:
-    candidates = sorted(
-        ((iou(a, b), i, j) for i, a in enumerate(truth)
-         for j, b in enumerate(predicted) if iou(a, b) >= threshold),
-        key=lambda item: (-item[0], item[1], item[2]))
-    taken_t, taken_p, matches = set(), set(), []
-    for _, i, j in candidates:
-        if i not in taken_t and j not in taken_p:
-            matches.append((i, j))
-            taken_t.add(i)
-            taken_p.add(j)
-    return matches
+def maximum_cardinality_matches(truth: list[dict], predicted: list[dict],
+                               threshold: float) -> list[tuple[int, int]]:
+    """Maximum number of independent IoU-qualified matches.
 
+    Deterministic augmenting paths, with descending IoU for each truth window.
+    Maximizes TP count; does NOT guarantee a maximum sum of IoUs.
+    """
+    adjacency: list[list[int]] = []
+    for actual in truth:
+        candidates = []
+        for j, proposal in enumerate(predicted):
+            overlap = iou(actual, proposal)
+            if overlap >= threshold:
+                candidates.append((overlap, j))
+        adjacency.append([j for _, j in sorted(candidates, key=lambda x: (-x[0], x[1]))])
+
+    owner_by_prediction: dict[int, int] = {}
+
+    def augment(truth_index: int, seen: set[int]) -> bool:
+        for prediction_index in adjacency[truth_index]:
+            if prediction_index in seen:
+                continue
+            seen.add(prediction_index)
+            owner = owner_by_prediction.get(prediction_index)
+            if owner is None or augment(owner, seen):
+                owner_by_prediction[prediction_index] = truth_index
+                return True
+        return False
+
+    for index in range(len(truth)):
+        augment(index, set())
+    return sorted(((i, j) for j, i in owner_by_prediction.items()))
+
+
+def greedy_matches(truth: list[dict], predicted: list[dict], threshold: float) -> list[tuple[int, int]]:
+    """Compatibility wrapper; uses the more accurate maximum-cardinality rule."""
+    return maximum_cardinality_matches(truth, predicted, threshold)
 
 def evaluate(cases: list[dict], threshold: float = 0.5) -> dict:
     if not isinstance(threshold, (int, float)) or not math.isfinite(threshold) or not 0 < threshold <= 1:
         raise ValueError("IoU threshold must be within (0, 1]")
     result = {"iou_threshold": threshold,
-              "matching": "greedy one-to-one; independent of labels",
+              "matching": "maximum-cardinality one-to-one IoU threshold; independent of labels (IoU sum not optimized)",
               "source_rights_independently_verified": False,
               "methods": {}}
     for method in METHODS:
@@ -103,7 +127,7 @@ def evaluate(cases: list[dict], threshold: float = 0.5) -> dict:
             truth, predictions = case["truth"], case["predictions"][method]
             truth_n += len(truth)
             pred_n += len(predictions)
-            matches = greedy_matches(truth, predictions, threshold)
+            matches = maximum_cardinality_matches(truth, predictions, threshold)
             tp += len(matches)
             for i, j in matches:
                 t, p = truth[i], predictions[j]
