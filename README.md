@@ -95,7 +95,7 @@ ueu create "Oscar Valdez — Reggaeton — 30 minutes" --offline \
   --attest-local-media --auto-actions --desktop
 ```
 
-This does **not** discover or license commercial songs, bypass unavailable source rights, certify boxing actions, or override the system disk-guard floor. Resume an already blocked job with `ueu resume JOB --auto-actions --attest-local-media` if its saved scan roots were explicit and its resources are still accessible.
+This does **not** discover or license commercial songs, bypass unavailable source rights, certify boxing actions, or override the system disk-guard floor. Resume an already blocked job with `ueu resume JOB --root /path/to/footage --root /path/to/music --auto-actions --attest-local-media` if its saved scan roots were explicit and its resources are still accessible.
 
 `ueu` coordinates discovery → acquisition → validation → playlist → planning → mix →
 export → quality control → delivery. Catalogue permissions and song history persist.
