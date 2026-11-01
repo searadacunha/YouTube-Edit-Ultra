@@ -42,7 +42,7 @@ After changes to console entry points, rerun the editable install. `ultra create
 | `--new-job` | Distinct job instead of reusing its stable identifier |
 | `--width`, `--height`, `--fps` | Override default 1920×1080 at 30 fps |
 
-Use `ueu create --help` for the installed interface. This command exposes no repeat, publication or disk-floor override. Resume with `ueu resume JOB --auto-actions --attest-local-media` to explicitly enable those options on a previously blocked job. Create a new job when verified checkpoint artifacts or input bytes change. An interrupted render restarts its render stage, not acquisition and planning from scratch.
+Use `ueu create --help` for the installed interface. This command exposes no repeat, publication or disk-floor override. Resume with `ueu resume JOB --root /path/to/footage --root /path/to/music --auto-actions --attest-local-media` to explicitly enable those options on a previously blocked job. Create a new job when verified checkpoint artifacts or input bytes change. An interrupted render restarts its render stage, not acquisition and planning from scratch.
 
 ## Discovery and rights
 
