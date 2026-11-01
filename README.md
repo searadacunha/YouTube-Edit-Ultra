@@ -66,7 +66,7 @@ Independent YouTube edits illustrating the sports/music style, **not videos gene
 
 > **Local export is the default.** Uploading requires an explicit command.
 >
-> **Reviewed action boundaries are required by the one-shot pipeline.** Motion peaks and sampled model responses can suggest highlights; they cannot verify a goal, a knockout or an athlete's identity. Technical success is not artistic acceptance or continuous human viewing.
+> **Reviewed boundaries are the default.** An explicit `--auto-actions` option can instead use motion candidates for a personal local draft, preserving their unverified/heuristic provenance. Motion peaks cannot verify goals, knockouts or athlete identity. Technical success is not artistic acceptance or continuous human viewing.
 
 ## What it does
 
@@ -86,6 +86,16 @@ ueu create "Terence Crawford — R&B 2000s — 30 minutes"
 ueu create "Canelo Álvarez — Reggaeton — 30 minutes"
 ueu create "Naoya Inoue — Japanese hip-hop — 20 minutes"
 ```
+
+For personal local projects with media you attest you may use, and where you accept **unverified** automatic action windows, explicitly select roots and opt in:
+
+```bash
+ueu create "Oscar Valdez — Reggaeton — 30 minutes" --offline \
+  --root "$HOME/Movies/Valdez" --root "$HOME/Music/reggaeton" \
+  --attest-local-media --auto-actions --desktop
+```
+
+This does **not** discover or license commercial songs, bypass unavailable source rights, certify boxing actions, or override the system disk-guard floor. Resume an already blocked job with `ueu resume JOB --auto-actions --attest-local-media` if its saved scan roots were explicit and its resources are still accessible.
 
 `ueu` coordinates discovery → acquisition → validation → playlist → planning → mix →
 export → quality control → delivery. Catalogue permissions and song history persist.
