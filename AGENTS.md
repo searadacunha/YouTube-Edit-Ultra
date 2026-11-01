@@ -1,6 +1,6 @@
 # YouTube-Edit-Ultra — Codex and Claude Code
 
-Read [docs/AUTONOMOUS_WORKFLOW.md](docs/AUTONOMOUS_WORKFLOW.md) before production and [docs/EDITORIAL_WORKFLOW.md](docs/EDITORIAL_WORKFLOW.md) for annotations or revisions. These are the shared production contract.
+Read [docs/AUTONOMOUS_WORKFLOW.md](docs/AUTONOMOUS_WORKFLOW.md) before music-highlight production, [docs/EDITORIAL_WORKFLOW.md](docs/EDITORIAL_WORKFLOW.md) for annotations or revisions, and [docs/DOCUMENTARY_MODE.md](docs/DOCUMENTARY_MODE.md) before narrated analysis films. The workflows share evidence and storage constraints but expose different entry points.
 
 ## Production and resumption
 
@@ -8,6 +8,13 @@ Read [docs/AUTONOMOUS_WORKFLOW.md](docs/AUTONOMOUS_WORKFLOW.md) before productio
 - Inspect the existing manifest, journal, running workers, reports and input hashes before resuming. Reuse verified checkpoints; do not rerun acquisition or rebuild an accepted soundtrack/thumbnail merely because the video stage failed. A changed verified artifact requires a new job.
 - State normally lives in `~/.local/share/youtube-edit-ultra/`; jobs in `output/jobs/`. Catalogue scans do not copy media. Never touch RuView or Trash. Mark generated fixtures and unrelated trees with `.ultra-ignore`.
 - Review the actual blocker, then continue available source/evidence research or frame review within the user's authorized task. Do not ask the user to coordinate downloads or assembly. Missing indispensable permissions, access, reviewed boundaries or capacity remain explicit blockers, never invented success.
+
+## Documentary-specific guardrails
+
+- `ueu documentary --spec FILE.yaml` reads a film spec; unlike `ueu create`, it does not acquire or review footage automatically. Do not claim `--stage plan` is dependency-free: it runs voice synthesis and alignment. Keep the dedicated Apple-Silicon `.venv-doc` outside git.
+- Use factual claim categories and referenced verified facts. `agent_frame_review` describes sampled frames examined by an agent; never label them `human_review` or assert boxer identity or action completeness without actual evidence.
+- Treat local voice references and project YAML as private. Obtain consent for voice imitation, review the generated narration by listening, and prepare explicit YouTube synthetic-media disclosure on authorized publication. The documentary output's `youtube_metadata.md` is not the upload CLI's JSON metadata file.
+- For documentary clips, keep review proxies and matching HD windows separate from montage action sidecars. A short `--proxy` preview tests layouts; it is not equivalent to final HD quality control.
 
 ## Rights and musical constraints
 

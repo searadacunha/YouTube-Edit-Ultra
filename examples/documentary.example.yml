@@ -1,0 +1,50 @@
+# Starter for ueu documentary. Card-only demo: no sports footage or rights claims.
+# Not a finished film. MLX narration and a permitted voice reference are required.
+# Paths below assume this YAML is in examples/ or projects/ under the repository root.
+title: 'Example — narrated sports analysis'
+description: 'A local demonstration of the documentary spec, not a publication-ready film.'
+output: ../output/documentary-demo
+duration_range: [8, 120]
+video:
+  width: 1280
+  height: 720
+  fps: 30
+voice:
+  python: ../.venv-doc/bin/python
+  script: ../scripts/doc_voice.py
+  model: mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit
+  ref_audio: audio/voice-reference.wav  # Relative to output/, not to this spec.
+  ref_text: null
+  lang: french
+  asr_lang: fr
+  seed: 7
+  tempo: 1.15
+  credit: 'Synthetic narration generated with Qwen3-TTS; human review required.'
+pacing:
+  lead: 0.25
+  breathe: 0.45
+music: []
+sources: {}   # When adding footage, supply metadata AND reviewed proxy/HD assets.
+chapters:
+  - id: introduction
+    title: Introduction
+    blocks:
+      - id: opening
+        text: 'Une analyse sportive sérieuse commence par les images, les sources et les limites de ce que nous pouvons observer.'
+        claims:
+          - cat: rhetorical_hook
+        visuals:
+          - type: card
+            kind: title
+            lines: ['OBSERVER', 'AVANT DE CONCLURE']
+            flex: true
+      - id: method
+        text: 'Les faits, les interprétations techniques et les pronostics sont trois choses différentes. Chaque affirmation doit rester identifiable.'
+        claims:
+          - cat: technical_interpretation
+        visuals:
+          - type: card
+            kind: chapter
+            kicker: METHODE
+            lines: ['FAITS', 'INTERPRETATIONS', 'PRONOSTICS']
+            flex: true

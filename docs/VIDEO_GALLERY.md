@@ -1,6 +1,6 @@
 # Video gallery credits
 
-The README gallery links to three public YouTube football edits set to music. Each card credits the original channel and opens that channel's video. The view counts belong to those uploads.
+The README gallery links to three independent public YouTube football edits set to music. **They are style references, not exports made by this repository.** Each card credits the original channel and opens its video. The view counts belong to those external uploads.
 
 ## View-count snapshot
 
