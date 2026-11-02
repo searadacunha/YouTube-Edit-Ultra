@@ -23,6 +23,19 @@ Read [docs/AUTONOMOUS_WORKFLOW.md](docs/AUTONOMOUS_WORKFLOW.md) before music-hig
 - Spotify is authenticated, fully paginated metadata only. Genre requests can use admissible local audio when optional Spotify access fails; explicit playlists remain binding. Offline playlist caches are prior snapshots. Keep OAuth tokens and callbacks private and outside git.
 - Licensed catalogue music can fill a genre request, but modern stock is not a historical R&B 2000s recording. Preserve decade, language/style constraints and known title-family exclusions. Never repeat music or sports actions automatically. Missing history is not evidence of no reuse.
 
+## YouTube blocking
+
+Measured on three uploads of one football montage (November 2026). Local export is unaffected; this is about what happens once a video is uploaded. Avoiding a block is not permission: the rights rules above still apply.
+
+- Decide at source selection, before any render. One blocked match blocks the whole video, however short the shot.
+- For a video meant for YouTube, exclude UEFA competitions, FIFA competitions and Ligue 1. Each blocked the video worldwide. Official club and fan compilations carry these matches too, so filter shot by shot on the competition, not by channel.
+- LALIGA footage blocks by territory, not worldwide. A LALIGA-only cut had 20 such claims and lost 39 countries, including France, Canada and Australia. Tell the user this before rendering when those audiences matter. Official presentation footage and the music claims measured so far had no effect.
+- No claim on one upload clears nothing: four Champions League matches unflagged on the second upload blocked the third. A competition never measured, such as a domestic cup, is excluded rather than tried.
+- Enforce this in the plan with an allowlist of competitions. A shot outside it fails the plan; a shot never disappears silently.
+- Upload as private and wait until Studio has finished its checks. YouTube warns that publishing earlier can bring a strike or limit visibility. The first readings move: one video went from 249 to 210 countries minutes after publication.
+- Keep the sources until that verdict. Read it from `playabilityStatus`, yt-dlp, `availableCountries` and Studio `/video/ID/claims`. oEmbed 200 does not prove playback. Report blocked countries and the audience share Studio gives.
+- Removing the footage is the only fix. Do not hide it from Content ID by mirroring, cropping, changing pitch or speed, or adding overlays.
+
 ## Editorial evidence and audio
 
 - One-shot jobs prefer reviewed action provenance. Opt-in --auto-actions may use motion candidates when no sidecar exists, keeping provenance='heuristic' and an unverified report. Preserve provenance on import/merge. Do not label motion boundaries reviewed without seeing the action.
