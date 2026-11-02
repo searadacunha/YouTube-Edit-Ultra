@@ -29,7 +29,7 @@ Measured on three uploads of one football montage (November 2026). Local export 
 
 - Decide at source selection, before any render. One blocked match blocks the whole video, however short the shot.
 - For a video meant for YouTube, exclude UEFA competitions, FIFA competitions and Ligue 1. Each blocked the video worldwide. Official club and fan compilations carry these matches too, so filter shot by shot on the competition, not by channel.
-- LALIGA footage blocks by territory, not worldwide. A LALIGA-only cut had 20 such claims and lost 39 countries, including France, Canada and Australia. Tell the user this before rendering when those audiences matter. Official presentation footage and the music claims measured so far had no effect.
+- LALIGA footage blocks by territory, not worldwide. A LALIGA-only cut had 19 such claims and lost 39 countries, including France, Canada and Australia. Tell the user this before rendering when those audiences matter. Official presentation footage and the music claims measured so far had no effect.
 - No claim on one upload clears nothing: four Champions League matches unflagged on the second upload blocked the third. A competition never measured, such as a domestic cup, is excluded rather than tried.
 - Enforce this in the plan with an allowlist of competitions. A shot outside it fails the plan; a shot never disappears silently.
 - Upload as private and wait until Studio has finished its checks. YouTube warns that publishing earlier can bring a strike or limit visibility. The first readings move: one video went from 249 to 210 countries minutes after publication.
